@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "dev": "docker-compose up --build",
+    "dev:backend": "docker-compose up backend --build",
+    "dev:frontend": "docker-compose up frontend --build",
+    "build": "docker-compose -f docker-compose.prod.yml build",
+    "prod": "docker-compose -f docker-compose.prod.yml up",
+    "down": "docker-compose down",
+    "logs": "docker-compose logs -f",
+    "logs:backend": "docker-compose logs -f backend",
+    "logs:frontend": "docker-compose logs -f frontend",
+    "clean": "docker-compose down -v && docker system prune -f"
+  }
+}
