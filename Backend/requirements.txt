@@ -23,7 +23,7 @@ google-genai==1.32.0
 google-ai-generativelanguage==0.6.18
 sentence-transformers==5.1.0
 transformers==4.55.4
-torch==2.7.1+cu118
+torch
 tokenizers==0.21.4
 
 # Groq API
