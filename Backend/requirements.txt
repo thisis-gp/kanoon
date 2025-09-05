@@ -1,50 +1,50 @@
 # Core FastAPI & Web
-fastapi==0.116.1
-uvicorn==0.35.0
-starlette==0.47.3
-python-dotenv==1.1.1
+fastapi
+uvicorn
+starlette
+python-dotenv
 
 # Database & Vector Store
-qdrant-client==1.15.1
-faiss-cpu==1.12.0
-sqlalchemy==2.0.43
+qdrant-client
+faiss-cpu
+sqlalchemy  
 
 # LangChain & AI
-langchain==0.3.27
-langchain-community==0.3.29
-langchain-core==0.3.75
-langchain-google-genai==2.1.10
-langchain-huggingface==0.3.1
-langchain-qdrant==0.2.0
-langchain-text-splitters==0.3.11
+langchain
+langchain-community
+langchain-core
+langchain-google-genai
+langchain-huggingface
+langchain-qdrant
+langchain-text-splitters
 
 # Embeddings & Models
-google-genai==1.32.0
-google-ai-generativelanguage==0.6.18
-sentence-transformers==5.1.0
-transformers==4.55.4
+google-genai
+google-ai-generativelanguage
+sentence-transformers
+transformers
 torch
-tokenizers==0.21.4
+tokenizers
 
 # Groq API
-groq==0.31.0
+groq
 
 # File Processing
-beautifulsoup4==4.13.5
-lxml==6.0.1
-pypdf==6.0.0
-unstructured==0.18.14
-python-magic==0.4.27
+beautifulsoup4
+lxml
+pypdf
+unstructured
+python-magic
 
 # Utilities
-numpy==2.3.2
-pandas==2.3.2
-scikit-learn==1.7.1
-scipy==1.16.1
-nltk==3.9.1
-requests==2.32.5
-aiohttp==3.12.15
-tenacity==9.1.2
-backoff==2.2.1
-orjson==3.11.3
-pydantic==2.11.7
+numpy
+pandas
+scikit-learn
+scipy
+nltk
+requests
+aiohttp
+tenacity
+backoff
+orjson
+pydantic
