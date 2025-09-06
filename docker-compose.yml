@@ -4,18 +4,28 @@ version: '3.8'
 services:
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: kanoon-legal-api
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=production
       - PORT=8000
       - HOST=0.0.0.0
+    env_file:
+      - ./Backend/.env
     volumes:
-      - ./backend:/app
-      - /app/__pycache__
-    command: uvicorn model.main:app --host 0.0.0.0 --port 8000 --reload
+      - ./Backend/logs:/app/logs
+      - ./Backend/cases_metadata.db:/app/cases_metadata.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: python model/main.py
     networks:
       - app-network
 

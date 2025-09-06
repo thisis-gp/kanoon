@@ -845,5 +845,14 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
     
-    print(f"Starting server on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    print(f"🚀 Starting Kanoon Legal Search API on {host}:{port}")
+    print(f"📊 Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    print(f"🔗 Access URL: http://{host}:{port}")
+    
+    uvicorn.run(
+        app, 
+        host=host, 
+        port=port,
+        reload=False,  # Disable reload in production
+        log_level="info"
+    )
