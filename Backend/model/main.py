@@ -47,6 +47,12 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 QDRANT_CLOUD_URL = os.getenv("QDRANT_CLOUD_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_CLOUD_API_KEY")
 
+# Server configuration
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
 # Validate required environment variables
 required_env_vars = {
     "GOOGLE_GEMINI_API_KEY": GOOGLE_GEMINI_API_KEY,
@@ -112,10 +118,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS (restrict in production)
+# Configure CORS with environment-based origins
+allowed_origins = [FRONTEND_URL]
+if ENVIRONMENT == "development":
+    allowed_origins.extend(["http://localhost:3000", "http://localhost:5173"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Specify allowed origins
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST"],  # Restrict methods
     allow_headers=["*"],
@@ -842,17 +852,16 @@ async def groq_status():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
     
-    print(f"🚀 Starting Kanoon Legal Search API on {host}:{port}")
-    print(f"📊 Environment: {os.getenv('ENVIRONMENT', 'development')}")
-    print(f"🔗 Access URL: http://{host}:{port}")
+    print(f"🚀 Starting Kanoon Legal Search API on {HOST}:{PORT}")
+    print(f"📊 Environment: {ENVIRONMENT}")
+    print(f"🔗 Access URL: http://{HOST}:{PORT}")
+    print(f"🌐 Frontend URL: {FRONTEND_URL}")
     
     uvicorn.run(
         app, 
-        host=host, 
-        port=port,
-        reload=False,  # Disable reload in production
+        host=HOST, 
+        port=PORT,
+        reload=(ENVIRONMENT == "development"),  # Enable reload only in development
         log_level="info"
     )
