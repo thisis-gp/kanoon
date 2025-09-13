@@ -34,19 +34,16 @@ jobs:
         cache-dependency-path: 'Frontend/package-lock.json'
         
     - name: Install dependencies
-      run: |
-        cd Frontend
-        npm ci
+      working-directory: Frontend
+      run: npm ci
         
     - name: Run tests
-      run: |
-        cd Frontend
-        npm run test --if-present
+      working-directory: Frontend
+      run: npm run test --if-present
         
     - name: Build application
-      run: |
-        cd Frontend
-        npm run build
+      working-directory: Frontend
+      run: npm run build
         
     - name: Deploy to Vercel
       uses: amondnet/vercel-action@v25
