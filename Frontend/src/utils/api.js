@@ -110,8 +110,15 @@ export async function getFullCaseDetails(source) {
 export async function getCaseById(id) {
     const response = await fetchAPI(`/cases/${id}`);
     console.log("Case API response:", response)
+    
+    // Backend only sends: id, title, judges, date, summary
+    // Frontend generates the PDF URLs
     const result = {
-      ...response,
+      id: response.id,
+      title: response.title || `Case ${id}`,
+      judges: response.judges || "Not available",
+      date: response.date || "Not available", 
+      summary: response.summary || "Legal case summary not available",
       pdfUrl: `/supreme_court_pdfs/${id}.pdf`,
       summaryUrl: `/supreme_court_pdfs/${id}.pdf` // Using PDF as summary for now
     };

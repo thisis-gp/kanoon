@@ -9,3 +9,4 @@ setup-frontend-env.sh
 *.md
 .git/
 node_modules/
+package.json
