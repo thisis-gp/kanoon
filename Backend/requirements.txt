@@ -13,14 +13,11 @@ sqlalchemy
 langchain
 langchain-community
 langchain-core
-langchain-google-genai
 langchain-huggingface
 langchain-qdrant
 langchain-text-splitters
 
-# Embeddings & Models
-google-genai
-google-ai-generativelanguage
+# Embeddings & Models (HuggingFace only - no Google dependencies)
 sentence-transformers
 transformers
 torch

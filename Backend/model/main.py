@@ -17,7 +17,6 @@ from pydantic import BaseModel
 from langchain_qdrant import Qdrant
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
@@ -42,7 +41,6 @@ os.makedirs(FAISS_INDEX_BASE, exist_ok=True)
 os.makedirs(TEXT_FILE_DIR, exist_ok=True)
 
 # Environment variables
-GOOGLE_GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 QDRANT_CLOUD_URL = os.getenv("QDRANT_CLOUD_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_CLOUD_API_KEY")
@@ -55,7 +53,6 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Validate required environment variables
 required_env_vars = {
-    "GOOGLE_GEMINI_API_KEY": GOOGLE_GEMINI_API_KEY,
     "GROQ_API_KEY": GROQ_API_KEY,
     "QDRANT_CLOUD_URL": QDRANT_CLOUD_URL,
     "QDRANT_API_KEY": QDRANT_API_KEY
@@ -68,19 +65,14 @@ if missing_vars:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize components on startup"""
-    global embeddings_hf, embeddings_google, qdrant, qdrant_client
+    global embeddings_hf, qdrant, qdrant_client
     
     try:
-        # Initialize embeddings
+        # Initialize HuggingFace embeddings (for Qdrant and FAISS loading)
         embeddings_hf = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
-        )
-        
-        embeddings_google = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=GOOGLE_GEMINI_API_KEY
         )
         
         # Initialize Qdrant client
@@ -133,7 +125,6 @@ app.add_middleware(
 
 # Global components
 embeddings_hf = None
-embeddings_google = None
 qdrant = None
 qdrant_client = None
 groq_client = None
@@ -249,24 +240,14 @@ def vector_store_exists(case_id: str) -> bool:
     return os.path.exists(os.path.join(index_dir, "index.faiss"))
 
 def create_vector_store(case_id: str, text: str) -> str:
-    """Create FAISS vector store for case"""
+    """
+    Check if FAISS vector store exists for case
+    Note: This function is kept for compatibility but indexes should be pre-built
+    """
     index_path = os.path.join(FAISS_INDEX_BASE, case_id)
     
-    if vector_store_exists(case_id):
-        return index_path
-    
-    # Split text into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=10000, 
-        chunk_overlap=1000
-    )
-    chunks = text_splitter.split_text(text)
-    
-    # Create vector store
-    vector_store = FAISS.from_texts(chunks, embedding=embeddings_google)
-    
-    os.makedirs(index_path, exist_ok=True)
-    vector_store.save_local(index_path)
+    if not vector_store_exists(case_id):
+        raise ValueError(f"Pre-built FAISS index not found for case {case_id}. Please run build_all_indexes.py first.")
     
     return index_path
 
@@ -348,34 +329,54 @@ def query_vector_store(user_question: str, case_id: str) -> str:
     index_path = os.path.join(FAISS_INDEX_BASE, case_id)
     
     if not vector_store_exists(case_id):
-        raise ValueError(f"FAISS index not found for case {case_id}")
+        raise ValueError(f"Pre-built FAISS index not found for case {case_id}. Please run build_all_indexes.py first.")
     
     vector_store = FAISS.load_local(
         index_path,
-        embeddings_google,
+        embeddings_hf,
         allow_dangerous_deserialization=True
     )
     
-    docs = vector_store.similarity_search(user_question, k=5)
+    # Get case metadata for context
+    case_metadata = get_case_metadata(case_id)
+    
+    # Use FAISS to find the single most relevant document for the specific question
+    docs = vector_store.similarity_search(user_question, k=1)  # Get only the most relevant document
+    
     try:
         asyncio.create_task(groq_rate_limiter.wait_if_needed())
         client = get_groq_client()
         
-        # Combine document content
-        context = "\n\n".join([doc.page_content for doc in docs])
+        # Use the single most relevant document (no size limiting)
+        context = docs[0].page_content if docs else "No relevant content found."
+        
+        # Build case info for context
+        case_info = ""
+        if case_metadata:
+            case_info = f"""
+CASE INFORMATION:
+- Case Title: {case_metadata.get('title', 'Not available')}
+- Judges: {case_metadata.get('judges', 'Not available')}
+- Date: {case_metadata.get('date', 'Not available')}
+- Summary: {case_metadata.get('summary', 'Not available')}
+"""
         
         chat_prompt = f"""You are Lexiscope, a legal AI assistant specializing in Indian law cases.
 
-CONTEXT: {context}
+{case_info}
+
+MOST RELEVANT CASE CONTENT (found by semantic search):
+{context}
 
 USER QUESTION: {user_question}
 
 INSTRUCTIONS:
-- Provide accurate, concise legal information
-- Cite specific sections, cases, or legal principles when available
-- If information is not in the context, clearly state "This information is not available in the provided case documents"
+- Answer the question based on the most relevant case content above
+- This content was specifically selected as the most relevant to your question
+- Be specific and cite relevant details from the case content
+- If the answer is not in this specific content, state "This information is not available in the most relevant part of the case documents"
 - Use clear, professional legal language
-- Format responses with bullet points for complex information
+- Provide a direct, focused answer
 
 RESPONSE:"""
         
@@ -418,30 +419,30 @@ async def extract_all_metadata_single_call(full_text: str) -> Dict:
         # ✅ SEPARATE SYSTEM AND USER MESSAGES (like playground)
         system_prompt = """You are a legal metadata extractor for Supreme Court of India judgments. Extract information and return ONLY valid JSON.
 
-Extract and return EXACTLY this JSON format with no additional text:
-{
-    "title": "exact case name with vs/v.",
-    "judges": "judge names separated by commas, no titles",
-    "date": "judgment date in DD-MM-YYYY format",
-    "summary": "concise 100-word summary of main legal issue and outcome"
-}
+        Extract and return EXACTLY this JSON format with no additional text:
+        {
+            "title": "exact case name with vs/v.",
+            "judges": "judge names separated by commas, no titles",
+            "date": "judgment date in DD-MM-YYYY format",
+            "summary": "concise 100-word summary of main legal issue and outcome"
+        }
 
-Rules:
-- For title: Look for "PETITIONER vs RESPONDENT" or "Appellant vs Respondent" pattern
-- For judges: Extract names from end signature lines like "....J. (Judge Name)" 
-- For date: Look for date at end after "New Delhi;" or similar
-- For summary: Focus on key legal principles, main issue, and court's decision
-- Use "Not available" if information cannot be found
-- Return only the JSON, no other text"""
+        Rules:
+        - For title: Look for "PETITIONER vs RESPONDENT" or "Appellant vs Respondent" pattern
+        - For judges: Extract names from end signature lines like "....J. (Judge Name)" 
+        - For date: Look for date at end after "New Delhi;" or similar
+        - For summary: Focus on key legal principles, main issue, and court's decision
+        - Use "Not available" if information cannot be found
+        - Return only the JSON, no other text"""
 
         user_content = f"""FIRST PAGE (for case title):
-{first_page}
+        {first_page}
 
-LAST PAGE (for judges and date):
-{last_page}
+        LAST PAGE (for judges and date):
+        {last_page}
 
-DOCUMENT SAMPLE (for summary):
-{text_sample}"""
+        DOCUMENT SAMPLE (for summary):
+        {text_sample}"""
 
         print("📡 Making Groq API call with system/user messages...")
         
@@ -532,6 +533,52 @@ async def root():
         "version": "1.0.0"
     }
 
+@app.get("/faiss_status")
+async def check_faiss_status():
+    """Check status of pre-built FAISS indexes"""
+    try:
+        if not os.path.exists(FAISS_INDEX_BASE):
+            return {
+                "status": "not_found",
+                "message": "FAISS index directory not found",
+                "indexes_available": 0,
+                "total_size_mb": 0
+            }
+        
+        # Count available indexes
+        indexes = []
+        for item in os.listdir(FAISS_INDEX_BASE):
+            item_path = os.path.join(FAISS_INDEX_BASE, item)
+            if os.path.isdir(item_path) and vector_store_exists(item):
+                indexes.append(item)
+        
+        # Calculate total size
+        total_size = 0
+        for index_dir in indexes:
+            index_path = os.path.join(FAISS_INDEX_BASE, index_dir)
+            for root, dirs, files in os.walk(index_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    total_size += os.path.getsize(file_path)
+        
+        total_size_mb = total_size / (1024 * 1024)
+        
+        return {
+            "status": "available",
+            "message": f"Found {len(indexes)} pre-built FAISS indexes",
+            "indexes_available": len(indexes),
+            "total_size_mb": round(total_size_mb, 2),
+            "sample_indexes": indexes[:10] if len(indexes) > 10 else indexes
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error checking FAISS status: {str(e)}",
+            "indexes_available": 0,
+            "total_size_mb": 0
+        }
+
 @app.post("/query")
 async def query_documents(request: QueryRequest):
     """Search legal documents using vector similarity"""
@@ -599,11 +646,6 @@ async def process_document_metadata(text: str, source: str) -> Optional[Dict]:
             print(f"⚠️ File not found: {text_file_path}, using provided text")
             full_document_text = text
         
-        # Create vector store if needed
-        if not vector_store_exists(case_id):
-            print(f"📚 Creating vector store for case {case_id}")
-            create_vector_store(case_id, full_document_text)
-
         # Single API call to extract all metadata
         print(f"🤖 Extracting metadata from full document for case {case_id}")
         metadata = await extract_all_metadata_single_call(full_document_text)
@@ -638,27 +680,20 @@ async def process_document_metadata(text: str, source: str) -> Optional[Dict]:
 
 @app.post("/chat_init")
 async def initialize_chat_session(request: ChatInitRequest):
-    """Initialize chat session with document text"""
+    """Initialize chat session with pre-built FAISS index"""
     try:
         case_id = request.case_id.strip()
-        text_file_path = os.path.join(TEXT_FILE_DIR, f"{case_id}.txt")
         
-        if not os.path.exists(text_file_path):
-            raise HTTPException(status_code=404, detail=f"Case file not found: {case_id}")
-        
-        # Read case text
-        with open(text_file_path, "r", encoding="utf-8") as file:
-            text = file.read()
-        
-        if not text.strip():
-            raise HTTPException(status_code=400, detail="Case file is empty")
-        
-        # Create vector store
-        create_vector_store(case_id, text)
+        # Check if pre-built FAISS index exists
+        if not vector_store_exists(case_id):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"FAISS index not found for case {case_id}. Please ensure indexes are pre-built."
+            )
         
         return {
             "status": "ready", 
-            "message": "Chat initialized successfully",
+            "message": "Chat initialized successfully with pre-built index",
             "case_id": case_id
         }
         
