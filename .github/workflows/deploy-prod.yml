@@ -13,11 +13,6 @@ on:
       - 'Backend/**'
   workflow_dispatch:
 
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: kanoon-backend
-  ECR_REGISTRY: 654654525844.dkr.ecr.us-east-1.amazonaws.com
-  APP_RUNNER_SERVICE: kanoon-app
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -107,16 +102,20 @@ jobs:
             }
           }'
         
-        # Wait for service to be ready
+        # Wait for service to be ready (polling approach)
         echo "Waiting for service update to complete..."
         while true; do
           STATUS=$(aws apprunner describe-service --service-arn $SERVICE_ARN --query "Service.Status" --output text)
+          echo "Service status: $STATUS"
           if [ "$STATUS" = "RUNNING" ]; then
-            break  # Service is ready
+            echo "Service is ready!"
+            break
           elif [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ]; then
-            exit 1  # Service failed
+            echo "Service update failed with status: $STATUS"
+            exit 1
           fi
-          sleep 30  # Wait 30 seconds
+          echo "Waiting 30 seconds before checking again..."
+          sleep 30
         done
         
         # Start deployment
@@ -128,10 +127,24 @@ jobs:
         SERVICE_ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='$APP_RUNNER_SERVICE'].ServiceArn" --output text)
         
         echo "Waiting for deployment to complete..."
-        aws apprunner wait service-updated --service-arn $SERVICE_ARN
+        # Poll deployment status
+        while true; do
+          STATUS=$(aws apprunner describe-service --service-arn $SERVICE_ARN --query "Service.Status" --output text)
+          echo "Service status: $STATUS"
+          if [ "$STATUS" = "RUNNING" ]; then
+            echo "Deployment completed successfully!"
+            break
+          elif [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ] || [ "$STATUS" = "DELETE_FAILED" ]; then
+            echo "Deployment failed with status: $STATUS"
+            exit 1
+          fi
+          echo "Waiting 30 seconds before checking again..."
+          sleep 30
+        done
         
-        # Get service status
-        aws apprunner describe-service --service-arn $SERVICE_ARN --query "Service.Status" --output text
+        # Get final service status
+        FINAL_STATUS=$(aws apprunner describe-service --service-arn $SERVICE_ARN --query "Service.Status" --output text)
+        echo "Final service status: $FINAL_STATUS"
         
     - name: Deployment Summary
       run: |
