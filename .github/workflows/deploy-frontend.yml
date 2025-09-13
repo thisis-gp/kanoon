@@ -1,0 +1,69 @@
+name: Deploy Frontend to Vercel
+
+on:
+  push:
+    branches: [ prod ]
+    paths:
+      - 'Frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  pull_request:
+    types: [closed]
+    branches: [ prod ]
+    paths:
+      - 'Frontend/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: frontend
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/prod') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'prod') ||
+      github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'Frontend/package-lock.json'
+        
+    - name: Install dependencies
+      run: |
+        cd Frontend
+        npm ci
+        
+    - name: Run tests
+      run: |
+        cd Frontend
+        npm run test --if-present
+        
+    - name: Build application
+      run: |
+        cd Frontend
+        npm run build
+        
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./Frontend
+        vercel-args: '--prod'
+        
+    - name: Deployment Summary
+      run: |
+        echo "🚀 Frontend deployment completed!"
+        echo "📱 Frontend deployed to Vercel"
+        echo "🔗 Check your Vercel dashboard for the deployment URL"
+        echo ""
+        echo "📋 Next Steps:"
+        echo "1. Test your frontend application"
+        echo "2. Update API endpoints if needed"
+        echo "3. Configure custom domain if required"
