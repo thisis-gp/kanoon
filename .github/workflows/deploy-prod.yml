@@ -109,7 +109,15 @@ jobs:
         
         # Wait for service to be ready
         echo "Waiting for service update to complete..."
-        aws apprunner wait service-updated --service-arn $SERVICE_ARN
+        while true; do
+          STATUS=$(aws apprunner describe-service --service-arn $SERVICE_ARN --query "Service.Status" --output text)
+          if [ "$STATUS" = "RUNNING" ]; then
+            break  # Service is ready
+          elif [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ]; then
+            exit 1  # Service failed
+          fi
+          sleep 30  # Wait 30 seconds
+        done
         
         # Start deployment
         echo "Starting deployment..."
