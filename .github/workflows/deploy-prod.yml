@@ -13,13 +13,11 @@ on:
       - 'Backend/**'
   workflow_dispatch:
 
-
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: kanoon-backend
   ECR_REGISTRY: 654654525844.dkr.ecr.us-east-1.amazonaws.com
   APP_RUNNER_SERVICE: kanoon-app
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -88,8 +86,8 @@ jobs:
         echo "Updating App Runner service: $SERVICE_ARN"
         echo "Using image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
         
-        # Update the service with new image
-        aws apprunner start-deployment \
+        # Update the service configuration first
+        aws apprunner update-service \
           --service-arn $SERVICE_ARN \
           --source-configuration '{
             "ImageRepository": {
@@ -108,6 +106,14 @@ jobs:
               "ImageRepositoryType": "ECR"
             }
           }'
+        
+        # Wait for service to be ready
+        echo "Waiting for service update to complete..."
+        aws apprunner wait service-updated --service-arn $SERVICE_ARN
+        
+        # Start deployment
+        echo "Starting deployment..."
+        aws apprunner start-deployment --service-arn $SERVICE_ARN
           
     - name: Wait for deployment to complete
       run: |
