@@ -96,17 +96,23 @@ git push origin master
 
 ### **Developer Workflow:**
 ```bash
-# 1. Work on master branch
+# 1. Create feature branch from master
 git checkout master
 git pull origin master
+git checkout -b feature/new-api-endpoint
 
-# 2. Make changes directly on master
+# 2. Make changes on feature branch
 # ... code changes ...
 
-# 3. Commit and push
+# 3. Commit and push feature branch
 git add .
 git commit -m "feat: add new API endpoint"
-git push origin master
+git push origin feature/new-api-endpoint
+
+# 4. Create PR: feature/new-api-endpoint → master
+# 5. After PR approval, merge to master
+# 6. Create PR: master → prod
+# 7. After PR approval, merge to prod (triggers deployment)
 ```
 
 ### **Release to Production:**
