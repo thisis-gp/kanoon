@@ -1,6 +1,11 @@
 # Use Node.js 18 Alpine as base image
 FROM node:18-alpine
 
+# Clear build cache and start fresh
+RUN rm -rf /var/cache/apk/* && \
+    rm -rf /tmp/* && \
+    rm -rf /var/tmp/*
+
 # Set working directory
 WORKDIR /app
 
@@ -11,11 +16,17 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 # Copy package.json and package-lock.json (if available)
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Clear npm cache and install dependencies
+RUN npm cache clean --force && \
+    npm ci --only=production --no-audit --no-fund
 
 # Copy the rest of the application code
 COPY . .
+
+# Clear any existing build artifacts
+RUN rm -rf dist/ && \
+    rm -rf node_modules/.cache/ && \
+    rm -rf .vite/
 
 # Build the application
 RUN npm run build
