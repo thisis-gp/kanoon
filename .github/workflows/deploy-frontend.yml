@@ -29,11 +29,11 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         
     - name: Install dependencies
       working-directory: Frontend
-      run: npm ci
+      run: npm install
         
     - name: Run tests
       working-directory: Frontend
@@ -49,7 +49,7 @@ jobs:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
         vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-        working-directory: ./Frontend
+        working-directory: Frontend
         vercel-args: '--prod'
         
     - name: Deployment Summary
