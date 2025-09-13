@@ -1,0 +1,42 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'Backend/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ master, prod ]
+    paths:
+      - 'Backend/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        cd Backend
+        pip install -r requirements.txt
+        
+    - name: Check Python syntax
+      run: |
+        cd Backend
+        python -m py_compile model/main.py
+        python -m py_compile build_all_indexes.py
+        
+    - name: Validate Docker build
+      run: |
+        cd Backend
+        docker build -t kanoon-backend-validate .
+        docker rmi kanoon-backend-validate
