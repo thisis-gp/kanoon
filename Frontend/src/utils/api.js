@@ -109,10 +109,12 @@ export async function getFullCaseDetails(source) {
  // Update getCaseById function
 export async function getCaseById(id) {
     const response = await fetchAPI(`/cases/${id}`);
-    console.log(response)
-    return {
+    console.log("Case API response:", response)
+    const result = {
       ...response,
-      pdfUrl: `/supreme_court_pdfs/${response.pdf_path}`,
-      summaryUrl: `/summaries/${response.summary_path}`
+      pdfUrl: `/supreme_court_pdfs/${id}.pdf`,
+      summaryUrl: `/supreme_court_pdfs/${id}.pdf` // Using PDF as summary for now
     };
+    console.log("Final case data with PDF URL:", result)
+    return result;
 }

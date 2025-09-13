@@ -27,11 +27,14 @@ export function PDFViewerComponent({ pdfUrl }) {
     // If pdfUrl starts with http, use it directly, otherwise prepend the base URL
     const url = pdfUrl.startsWith("http") ? pdfUrl : `${window.location.origin}${pdfUrl}`
 
+    console.log("PDF URL:", pdfUrl)
+    console.log("Full URL:", url)
     setFullUrl(url)
 
     // Check if the PDF exists
     fetch(url, { method: "HEAD" })
       .then((response) => {
+        console.log("PDF fetch response:", response.status, response.statusText)
         if (!response.ok) {
           throw new Error(`PDF not found: ${response.status}`)
         }
