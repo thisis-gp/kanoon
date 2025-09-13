@@ -1,9 +1,13 @@
 {
+  "name": "kanoon-legal-search",
+  "version": "1.0.0",
+  "description": "AI-powered legal document search and analysis system",
+  "private": true,
   "scripts": {
     "dev": "docker-compose up --build",
     "dev:backend": "docker-compose up backend --build",
     "dev:frontend": "docker-compose up frontend --build",
-    "build": "docker-compose -f docker-compose.prod.yml build",
+    "build:docker": "docker-compose -f docker-compose.prod.yml build",
     "prod": "docker-compose -f docker-compose.prod.yml up",
     "down": "docker-compose down",
     "logs": "docker-compose logs -f",
