@@ -11,6 +11,14 @@
   ],
   "routes": [
     {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/supreme_court_pdfs/(.*)",
+      "dest": "/supreme_court_pdfs/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }

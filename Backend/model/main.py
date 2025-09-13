@@ -215,9 +215,26 @@ def get_case_metadata(case_id: str) -> Optional[Dict]:
         # Try by ID if filename doesn't work
         try:
             result = DatabaseManager.get_case_by_id(int(case_id))
-            return result
+            if result:
+                print(f"Case metadata retrieved: {result}")
+                return result
         except ValueError:
-            return None
+            pass
+        
+        # If not found in database, check if file exists and create basic metadata
+        text_file_path = os.path.join(TEXT_FILE_DIR, f"{case_id}.txt")
+        if os.path.exists(text_file_path):
+            print(f"📄 Case {case_id} file exists but not in database, creating basic metadata")
+            return {
+                "id": case_id,
+                "file_name": f"{case_id}.txt",
+                "title": f"Legal Case {case_id} - Supreme Court Judgment",
+                "judges": "Not available",
+                "date": "Not available",
+                "summary": "Legal case summary not available"
+            }
+        
+        return None
             
     except Exception as e:
         print(f"Error retrieving case metadata: {e}")
@@ -753,12 +770,10 @@ async def get_case_details(case_id: str):
         
         return {
             "id": case_data["id"],
-            "title": case_data["title"],
-            "judges": case_data["judges"],
-            "date": case_data["date"],
-            "summary": case_data["summary"],
-            "pdf_path": case_data["pdf_path"],
-            "summary_path": case_data["summary_path"]
+            "title": case_data.get("title", case_data.get("file_name", f"Case {case_data['id']}")),
+            "judges": case_data.get("judges", "Not available"),
+            "date": case_data.get("date", "Not available"),
+            "summary": case_data.get("summary", "Legal case summary not available")
         }
         
     except HTTPException:
