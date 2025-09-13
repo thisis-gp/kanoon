@@ -114,6 +114,13 @@ app = FastAPI(
 allowed_origins = [FRONTEND_URL]
 if ENVIRONMENT == "development":
     allowed_origins.extend(["http://localhost:3000", "http://localhost:5173"])
+elif ENVIRONMENT == "production":
+    # Add Vercel domains for production
+    allowed_origins.extend([
+        "https://kanoon-two.vercel.app",
+        "https://kanoon.vercel.app",
+        "https://*.vercel.app"  # Allow all Vercel subdomains
+    ])
 
 app.add_middleware(
     CORSMiddleware,
@@ -354,31 +361,31 @@ def query_vector_store(user_question: str, case_id: str) -> str:
         case_info = ""
         if case_metadata:
             case_info = f"""
-CASE INFORMATION:
-- Case Title: {case_metadata.get('title', 'Not available')}
-- Judges: {case_metadata.get('judges', 'Not available')}
-- Date: {case_metadata.get('date', 'Not available')}
-- Summary: {case_metadata.get('summary', 'Not available')}
-"""
+        CASE INFORMATION:
+        - Case Title: {case_metadata.get('title', 'Not available')}
+        - Judges: {case_metadata.get('judges', 'Not available')}
+        - Date: {case_metadata.get('date', 'Not available')}
+        - Summary: {case_metadata.get('summary', 'Not available')}
+        """
         
         chat_prompt = f"""You are Lexiscope, a legal AI assistant specializing in Indian law cases.
 
-{case_info}
+        {case_info}
 
-MOST RELEVANT CASE CONTENT (found by semantic search):
-{context}
+        MOST RELEVANT CASE CONTENT (found by semantic search):
+        {context}
 
-USER QUESTION: {user_question}
+        USER QUESTION: {user_question}
 
-INSTRUCTIONS:
-- Answer the question based on the most relevant case content above
-- This content was specifically selected as the most relevant to your question
-- Be specific and cite relevant details from the case content
-- If the answer is not in this specific content, state "This information is not available in the most relevant part of the case documents"
-- Use clear, professional legal language
-- Provide a direct, focused answer
+        INSTRUCTIONS:
+        - Answer the question based on the most relevant case content above
+        - This content was specifically selected as the most relevant to your question
+        - Be specific and cite relevant details from the case content
+        - If the answer is not in this specific content, state "This information is not available in the most relevant part of the case documents"
+        - Use clear, professional legal language
+        - Provide a direct, focused answer
 
-RESPONSE:"""
+        RESPONSE:"""
         
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
@@ -658,6 +665,10 @@ async def process_document_metadata(text: str, source: str) -> Optional[Dict]:
         case_title = metadata.get("title", "Not available")
         if case_title == "Not available" or len(case_title) > 200 or "not available" in case_title.lower():
             case_title = f"Case {case_id}"
+        
+        # Ensure title is always clickable by making it descriptive
+        if case_title == f"Case {case_id}":
+            case_title = f"Legal Case {case_id} - Supreme Court Judgment"
         
         result = {
             "id": case_id,
