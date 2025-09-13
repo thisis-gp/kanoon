@@ -18,7 +18,6 @@ env:
   ECR_REPOSITORY: kanoon-backend
   ECR_REGISTRY: 654654525844.dkr.ecr.us-east-1.amazonaws.com
   APP_RUNNER_SERVICE: kanoon-app
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
