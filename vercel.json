@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "git": {
-    "deploymentEnabled": {
-      "prod": true,
-      "master": false
-    }
-  }
-}
