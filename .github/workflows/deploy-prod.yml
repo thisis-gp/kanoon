@@ -13,7 +13,7 @@ on:
       - 'Backend/**'
   workflow_dispatch:
 
-  env:
+env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: kanoon-backend
   ECR_REGISTRY: 654654525844.dkr.ecr.us-east-1.amazonaws.com
