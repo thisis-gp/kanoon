@@ -6,14 +6,11 @@ def create_db():
 
     cursor.execute("""
      CREATE TABLE IF NOT EXISTS case_metadata (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY,
         file_name TEXT NOT NULL,
-        case_number TEXT,
-        petitioner TEXT,
-        respondent TEXT,
+        title TEXT,
         date TEXT,
         judges TEXT,
-        acts_referred TEXT,
         summary TEXT,
         file_path TEXT,
         content_hash TEXT,

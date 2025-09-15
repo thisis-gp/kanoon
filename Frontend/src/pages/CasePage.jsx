@@ -18,10 +18,9 @@ import {
 } from "../components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { FileText, MessageSquare, FileSearch, AlertCircle } from "lucide-react"
-import { getCaseById, initializeCaseChat, sendChatMessage } from "../utils/api"
+import { getCaseById, sendChatMessage } from "../utils/api"
 import { saveChatMessage } from "../utils/firebase-helpers"
 import { FAQSection } from "../components/faq-section"
-import { Logo } from "../components/logo"
 
 export default function CasePage() {
   const { id } = useParams()
@@ -30,7 +29,6 @@ export default function CasePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState("document")
-  const [chatInitialized, setChatInitialized] = useState(false)
 
   useEffect(() => {
     const loadCaseData = async () => {
@@ -42,15 +40,6 @@ export default function CasePage() {
         const data = await getCaseById(id)
         console.log("Loaded case data:", data)
         setCaseData(data)
-
-        // Initialize chat in the background
-        try {
-          await initializeCaseChat(id)
-          setChatInitialized(true)
-        } catch (chatError) {
-          console.error("Chat initialization error:", chatError)
-          // Don't set main error for chat initialization failure
-        }
       } catch (error) {
         console.error("Error fetching case data:", error)
         setError("Failed to load case data. Please try again later.")
@@ -64,11 +53,6 @@ export default function CasePage() {
 
   const handleSendMessage = async (message) => {
     try {
-      if (!chatInitialized) {
-        // Try to initialize chat if not already done
-        await initializeCaseChat(id)
-        setChatInitialized(true)
-      }
 
       // Send message to backend
       const response = await sendChatMessage(id, message)

@@ -114,6 +114,12 @@ app = FastAPI(
 allowed_origins = [FRONTEND_URL]
 if ENVIRONMENT == "development":
     allowed_origins.extend(["http://localhost:3000", "http://localhost:5173"])
+elif ENVIRONMENT == "production":
+    # Add Vercel domains for production
+    allowed_origins.extend([
+        "https://kanoon-two.vercel.app",
+        "https://kanoon-prod.vercel.app"
+    ])
 
 app.add_middleware(
     CORSMiddleware,
@@ -201,16 +207,19 @@ def get_case_metadata(case_id: str) -> Optional[Dict]:
     """Get case metadata from your database"""
     try:
         # Try by filename first (for existing functionality)
-        result = DatabaseManager.get_case_by_filename(f"{case_id}.txt")
+        result = DatabaseManager.get_case_by_filename(f"{case_id}.pdf")
         if result:
             return result
         
         # Try by ID if filename doesn't work
         try:
             result = DatabaseManager.get_case_by_id(int(case_id))
-            return result
+            if result:
+                print(f"Case metadata retrieved: {result}")
+                return result
         except ValueError:
-            return None
+            pass
+        
             
     except Exception as e:
         print(f"Error retrieving case metadata: {e}")
@@ -219,7 +228,7 @@ def get_case_metadata(case_id: str) -> Optional[Dict]:
 def save_case_metadata(data: Dict) -> bool:
     """Save case metadata using your existing insert function"""
     if not data.get("file_name") and data.get("id"):
-        data["file_name"] = f"{data['id']}.txt"
+        data["file_name"] = f"{data['id']}.pdf"
     
     if not data.get("file_name"):
         print(f"❌ Cannot save metadata without file_name: {data}")
@@ -339,59 +348,66 @@ def query_vector_store(user_question: str, case_id: str) -> str:
     
     # Get case metadata for context
     case_metadata = get_case_metadata(case_id)
-    
     # Use FAISS to find the single most relevant document for the specific question
-    docs = vector_store.similarity_search(user_question, k=1)  # Get only the most relevant document
-    
+    docs = []
+    try:
+        # Ensure index has vectors
+        ntotal = getattr(getattr(vector_store, "index", None), "ntotal", 0) or 0
+        if ntotal == 0:
+            print(f"[FAISS] Index empty for case {case_id} (ntotal=0)")
+        else:
+            # Prefer retriever API (more stable across versions)
+            retriever = vector_store.as_retriever(search_kwargs={"k": 1})
+            docs = retriever.invoke(user_question)
+            # Fallback to direct similarity_search if retriever misbehaves
+            if not docs:
+                docs = vector_store.similarity_search(user_question, k=1)
+    except Exception as e:
+        print(f"[FAISS] similarity search error for case {case_id}: {e}")
+        docs = []
+
+    context = docs[0].page_content if docs else "No relevant content found."
     try:
         asyncio.create_task(groq_rate_limiter.wait_if_needed())
         client = get_groq_client()
-        
-        # Use the single most relevant document (no size limiting)
-        context = docs[0].page_content if docs else "No relevant content found."
-        
         # Build case info for context
         case_info = ""
         if case_metadata:
             case_info = f"""
-CASE INFORMATION:
-- Case Title: {case_metadata.get('title', 'Not available')}
-- Judges: {case_metadata.get('judges', 'Not available')}
-- Date: {case_metadata.get('date', 'Not available')}
-- Summary: {case_metadata.get('summary', 'Not available')}
-"""
-        
+        CASE INFORMATION:
+        - Case Title: {case_metadata.get('title', 'Not available')}
+        - Judges: {case_metadata.get('judges', 'Not available')}
+        - Date: {case_metadata.get('date', 'Not available')}
+        - Summary: {case_metadata.get('summary', 'Not available')}
+        """
         chat_prompt = f"""You are Lexiscope, a legal AI assistant specializing in Indian law cases.
 
-{case_info}
+        {case_info}
 
-MOST RELEVANT CASE CONTENT (found by semantic search):
-{context}
+        MOST RELEVANT CASE CONTENT (found by semantic search):
+        {context}
 
-USER QUESTION: {user_question}
+        USER QUESTION: {user_question}
 
-INSTRUCTIONS:
-- Answer the question based on the most relevant case content above
-- This content was specifically selected as the most relevant to your question
-- Be specific and cite relevant details from the case content
-- If the answer is not in this specific content, state "This information is not available in the most relevant part of the case documents"
-- Use clear, professional legal language
-- Provide a direct, focused answer
+        INSTRUCTIONS:
+        - Answer the question based on the most relevant case content above
+        - This content was specifically selected as the most relevant to your question
+        - Be specific and cite relevant details from the case content
+        - If the answer is not in this specific content, state "This information is not available in the most relevant part of the case documents"
+        - Use clear, professional legal language
+        - Provide a direct, focused answer
 
-RESPONSE:"""
-        
+        RESPONSE:"""
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": chat_prompt}],
             temperature=0.2,
         )
-        
         answer = completion.choices[0].message.content.strip()
         
         # Clean up common AI response artifacts
         answer = answer.replace("Answer is not available in the context.", "Not available")
         answer = answer.replace("answer is not available in the context", "Not available")
-        
         return answer
         
     except Exception as e:
@@ -607,6 +623,7 @@ async def query_documents(request: QueryRequest):
 
             # Check database cache first
             cached_data = get_case_metadata(case_id)
+            print(f"Cached data: {cached_data}")
             if cached_data:
                 structured_results.append(cached_data)
                 continue
@@ -630,7 +647,7 @@ async def query_documents(request: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
-async def process_document_metadata(text: str, source: str) -> Optional[Dict]:
+async def  process_document_metadata(text: str, source: str) -> Optional[Dict]:
     """Process document to extract metadata"""
     try:
         case_id = extract_case_id(source)
@@ -659,9 +676,13 @@ async def process_document_metadata(text: str, source: str) -> Optional[Dict]:
         if case_title == "Not available" or len(case_title) > 200 or "not available" in case_title.lower():
             case_title = f"Case {case_id}"
         
+        # Ensure title is always clickable by making it descriptive
+        if case_title == f"Case {case_id}":
+            case_title = f"Legal Case {case_id} - Supreme Court Judgment"
+        
         result = {
             "id": case_id,
-            "file_name": f"{case_id}.txt",
+            "file_name": f"{case_id}.pdf",
             "source": source,
             "title": case_title,
             "judges": metadata.get("judges", "Not available"),
@@ -719,6 +740,7 @@ async def handle_chat_query(request: ChatMessageRequest):
             )
         
         answer = query_vector_store(question, case_id)
+        print(f"Answer: {answer}")
         
         return {
             "case_id": case_id,
@@ -742,12 +764,10 @@ async def get_case_details(case_id: str):
         
         return {
             "id": case_data["id"],
-            "title": case_data["title"],
-            "judges": case_data["judges"],
-            "date": case_data["date"],
-            "summary": case_data["summary"],
-            "pdf_path": case_data["pdf_path"],
-            "summary_path": case_data["summary_path"]
+            "title": case_data.get("title", case_data.get("file_name", f"Case {case_data['id']}")),
+            "judges": case_data.get("judges", "Not available"),
+            "date": case_data.get("date", "Not available"),
+            "summary": case_data.get("summary", "Legal case summary not available")
         }
         
     except HTTPException:

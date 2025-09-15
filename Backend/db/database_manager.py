@@ -31,8 +31,9 @@ class DatabaseManager:
                 # Enhanced case_metadata table
                 conn.execute("""
                 CREATE TABLE IF NOT EXISTS case_metadata (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY,
                     file_name TEXT NOT NULL,
+                    title TEXT,
                     case_number TEXT,
                     petitioner TEXT,
                     respondent TEXT,
@@ -50,6 +51,7 @@ class DatabaseManager:
 
                 # Add new columns if they don't exist
                 new_columns = [
+                    ("title", "TEXT"),
                     ("content_hash", "TEXT"),
                     ("vector_stored", "BOOLEAN DEFAULT FALSE"),
                     ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
@@ -128,17 +130,13 @@ class DatabaseManager:
                     # Update existing record
                     conn.execute("""
                     UPDATE case_metadata SET
-                        case_number = ?, petitioner = ?, respondent = ?, 
-                        date = ?, judges = ?, acts_referred = ?, summary = ?,
+                        title = ?, date = ?, judges = ?, summary = ?,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE file_name = ?
                     """, (
-                        normalize(metadata.get("case_number")),
-                        normalize(metadata.get("petitioner")),
-                        normalize(metadata.get("respondent")),
+                        normalize(metadata.get("title")),
                         normalize(metadata.get("date")),
                         normalize(metadata.get("judges")),
-                        normalize(metadata.get("acts_referred")),
                         normalize(metadata.get("summary")),
                         metadata.get("file_name")
                     ))
@@ -147,18 +145,14 @@ class DatabaseManager:
                     # Insert new record
                     conn.execute("""
                     INSERT INTO case_metadata 
-                    (file_name, case_number, petitioner, respondent, date, judges, acts_referred, summary, file_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (file_name, title, date, judges, summary)
+                    VALUES (?, ?, ?, ?, ?)
                     """, (
                         metadata.get("file_name"),
-                        normalize(metadata.get("case_number")),
-                        normalize(metadata.get("petitioner")),
-                        normalize(metadata.get("respondent")),
+                        normalize(metadata.get("title")),
                         normalize(metadata.get("date")),
                         normalize(metadata.get("judges")),
-                        normalize(metadata.get("acts_referred")),
-                        normalize(metadata.get("summary")),
-                        metadata.get("file_path")
+                        normalize(metadata.get("summary"))
                     ))
                     print(f"✅ Inserted new record for {metadata.get('file_name')}")
                 

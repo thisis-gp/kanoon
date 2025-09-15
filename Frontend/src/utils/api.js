@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export async function fetchAPI(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
@@ -109,10 +109,19 @@ export async function getFullCaseDetails(source) {
  // Update getCaseById function
 export async function getCaseById(id) {
     const response = await fetchAPI(`/cases/${id}`);
-    console.log(response)
-    return {
-      ...response,
-      pdfUrl: `/supreme_court_pdfs/${response.pdf_path}`,
-      summaryUrl: `/summaries/${response.summary_path}`
+    console.log("Case API response:", response)
+    
+    // Backend only sends: id, title, judges, date, summary
+    // Frontend generates the PDF URLs
+    const result = {
+      id: response.id,
+      title: response.title || `Case ${id}`,
+      judges: response.judges || "Not available",
+      date: response.date || "Not available", 
+      summary: response.summary || "Legal case summary not available",
+      pdfUrl: `/supreme_court_pdfs/${id}.pdf`,
+      summaryUrl: `/supreme_court_pdfs/${id}.pdf` // Using PDF as summary for now
     };
+    console.log("Final case data with PDF URL:", result)
+    return result;
 }

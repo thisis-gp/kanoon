@@ -1,0 +1,12 @@
+Backend/
+docker-compose.yml
+docker-compose.prod.yml
+deploy.sh
+DEPLOYMENT.md
+FRONTEND_DEPLOYMENT.md
+SETUP_GITFLOW.md
+setup-frontend-env.sh
+*.md
+.git/
+node_modules/
+package.json
