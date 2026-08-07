@@ -2,7 +2,7 @@ Frontend – React (Vite) SPA
 
 Overview
 
-The Kanoon frontend is a Vite + React SPA deployed on Vercel. It provides global search, per‑case pages with PDF viewing, and a chat interface grounded on backend retrieval.
+The AILSE frontend is a Vite + React SPA deployed on Vercel. It provides global search, per‑case pages with PDF viewing, and a chat interface grounded on backend retrieval.
 
 Project Report
 

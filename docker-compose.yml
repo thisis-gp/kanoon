@@ -6,13 +6,14 @@ services:
     build:
       context: ./Backend
       dockerfile: Dockerfile
-    container_name: kanoon-legal-api
+    container_name: ailse-legal-api
     ports:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
       - PORT=8000
       - HOST=0.0.0.0
+      - DATABASE_URL=postgresql://ailse:ailse@db:5432/ailse
     env_file:
       - ./Backend/.env
     volumes:
@@ -25,7 +26,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    command: python model/main.py
+    command: python -m uvicorn model.api:app --host 0.0.0.0 --port 8000
+    depends_on:
+      - db
     networks:
       - app-network
 
@@ -46,6 +49,24 @@ services:
     networks:
       - app-network
 
+  db:
+    image: paradedb/paradedb:latest
+    container_name: ailse-db
+    environment:
+      - POSTGRES_USER=ailse
+      - POSTGRES_PASSWORD=ailse
+      - POSTGRES_DB=ailse
+    ports:
+      - "5432:5432"
+    volumes:
+      - ailse_pgdata:/var/lib/postgresql
+    restart: unless-stopped
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  ailse_pgdata:

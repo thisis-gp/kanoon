@@ -1,6 +1,6 @@
-# Kanoon Deployment Guide
+# AILSE Deployment Guide
 
-This document explains the CI/CD pipeline setup for the Kanoon legal search application.
+This document explains the CI/CD pipeline setup for the AILSE (AI-based Legal Search Engine) legal search application.
 
 ## Branch Structure
 

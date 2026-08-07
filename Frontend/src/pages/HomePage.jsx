@@ -1,85 +1,98 @@
-import Header from "../components/Header"
-import People from "../components/PeopleCanvas"
-import LandingCard from "../components/LandingCard"
+"use client"
+
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { Navbar } from "../components/navbar"
-import { useAuth } from "../context/auth-context"
+import { getSuggestions } from "../utils/api"
 
+// mix of search-style topics and answerable questions
+const EXAMPLES = [
+  "Murder cases",
+  "Cases under Section 302 IPC",
+  "What are the conditions for anticipatory bail?",
+  "Difference between culpable homicide and murder",
+]
 
-function HomePage() {
-    const { user } = useAuth()
+// A question → grounded answer (/ask); a topic/section → case list (/search).
+export function isQuestion(text) {
+  const s = text.trim().toLowerCase()
+  return s.endsWith("?") ||
+    /^(what|when|how|why|can|could|is|are|do|does|did|which|whether|should|who|explain|difference|define)\b/.test(s)
+}
+
+const FEATURES = [
+  ["Grounded answers", "Every answer is built only from real judgments, with inline [n] citations you can click — no hallucinations."],
+  ["Hybrid search", "Semantic + keyword search with reranking finds the right case, not just keyword matches."],
+  ["Case explorer", "Open any judgment, read the PDF, chat with it, and see which cases it cites."],
+]
+
+export default function HomePage() {
+  const [q, setQ] = useState("")
+  const [chips, setChips] = useState(EXAMPLES)   // popular history, falls back to defaults
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    getSuggestions().then((s) => { if (s?.length) setChips(s) }).catch(() => {})
+  }, [])
+  const go = (text) => navigate(`/results?q=${encodeURIComponent(text.trim())}`)
+  const submit = (e) => { e.preventDefault(); if (q.trim()) go(q.trim()) }
 
   return (
-    <div className="min-h-screen bg-background">
-      <People />
-      <Navbar/>
+    <div className="min-h-screen bg-background text-foreground">
+      <Navbar />
 
-      <main className="mx-auto px-4 py-12 w-full max-w-[800px]">
-        <svg
-          className="absolute top-[-32px] left-1/2 transform -translate-x-1/2 w-[220px] h-auto z-[-1]"
-          width="495"
-          height="623"
-          viewBox="0 0 495 623"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M167.19 364.254C83.4786 364.254 0 404.819 0 404.819C0 404.819 141.781 19.4876 142.087 18.7291C146.434 7.33701 153.027 0 162.289 0H332.441C341.703 0 348.574 7.33701 352.643 18.7291C352.92 19.5022 494.716 404.819 494.716 404.819C494.716 404.819 426.67 364.254 327.525 364.254L264.41 169.408C262.047 159.985 255.147 153.581 247.358 153.581C239.569 153.581 232.669 159.985 230.306 169.408L167.19 364.254ZM160.869 530.172C160.877 530.18 160.885 530.187 160.894 530.195L160.867 530.181C160.868 530.178 160.868 530.175 160.869 530.172ZM136.218 411.348C124.476 450.467 132.698 504.458 160.869 530.172C160.997 529.696 161.125 529.242 161.248 528.804C161.502 527.907 161.737 527.073 161.917 526.233C165.446 509.895 178.754 499.52 195.577 500.01C211.969 500.487 220.67 508.765 223.202 527.254C224.141 534.12 224.23 541.131 224.319 548.105C224.328 548.834 224.337 549.563 224.347 550.291C224.563 566.098 228.657 580.707 237.264 593.914C245.413 606.426 256.108 615.943 270.749 622.478C270.593 621.952 270.463 621.508 270.35 621.126C270.045 620.086 269.872 619.499 269.685 618.911C258.909 585.935 266.668 563.266 295.344 543.933C298.254 541.971 301.187 540.041 304.12 538.112C310.591 533.854 317.059 529.599 323.279 525.007C345.88 508.329 360.09 486.327 363.431 457.844C364.805 446.148 363.781 434.657 359.848 423.275C358.176 424.287 356.587 425.295 355.042 426.275C351.744 428.366 348.647 430.33 345.382 431.934C303.466 452.507 259.152 455.053 214.03 448.245C184.802 443.834 156.584 436.019 136.218 411.348Z"
-            fill="url(#paint0_linear_1805_24383)"
-          ></path>
-          <defs>
-            <linearGradient
-              id="paint0_linear_1805_24383"
-              x1="247.358"
-              y1="0"
-              x2="247.358"
-              y2="622.479"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop stopOpacity="0.9"></stop>
-              <stop offset="1" stopOpacity="0.2"></stop>
-            </linearGradient>
-          </defs>
-        </svg>
+      <main className="mx-auto max-w-3xl px-4 pt-16 pb-24 text-center md:pt-24">
+        <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-indigo-300">
+          ⚖️ 900+ Supreme Court judgments · answers with sources
+        </span>
 
-        <h1 className="text-4xl md:text-6xl font-bold text-center mb-8">
-          Welcome to{" "}
-          <span className="bg-gradient-to-r from-[#8844ee] via-[#e0ccfa] to-white bg-clip-text text-transparent bg-[length:400%]">
-            Kanoon
-          </span>
+        <h1 className="mt-6 text-4xl font-bold tracking-tight md:text-6xl">
+          Research Indian law,
+          <br />
+          <span className="text-indigo-400">answered with citations</span>
         </h1>
 
-        <p className="text-lg mb-8 border border-border bg-card/50 p-4 rounded-lg">
-          Built with{" "}
-          <code className="text-sm font-bold bg-[rgba(224,204,250,0.12)] text-[rgb(224,204,250)] rounded px-1 py-0.5">
-            React
-          </code>{" "}
-          framework with Python as Backend, LangChain and Google Gemini that incorporates all the components and here
-          we've created the{" "}
-          <code className="text-sm font-bold bg-[rgba(224,204,250,0.12)] text-[rgb(224,204,250)] rounded px-1 py-0.5">
-            Legal aid Chatbot
-          </code>
-          .
+        <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground">
+          Ask a question in plain English. Kanoon reads Supreme Court judgments and
+          answers with sources you can open — grounded, never made up.
         </p>
 
-        <ul className="grid grid-cols-1 md:grid-cols-2 gap-8 p-0">
-          <LandingCard
-            href="/login"
-            title="Get Started"
-            body="Ready to dive into the world of AI-powered legal assistance? Click here to start using Lexiscope. You can type your first legal question right away, and let our chatbot guide you through a seamless, informative experience."
+        <form
+          onSubmit={submit}
+          className="mx-auto mt-8 flex max-w-2xl items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2 transition focus-within:border-indigo-500"
+        >
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Ask anything about Indian case law…"
+            className="flex-1 bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
           />
-          <LandingCard
-            href="https://github.com/thisis-gp"
-            title="Meet the Team"
-            body="Meet our creators, learn about our mission to democratize legal knowledge, and discover how we are working to make legal services more accessible through technology."
-          />
-        </ul>
+          <button className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white transition hover:bg-indigo-700">
+            Ask
+          </button>
+        </form>
+
+        <div className="mx-auto mt-4 flex max-w-2xl flex-wrap justify-center gap-2">
+          {chips.map((x) => (
+            <button
+              key={x}
+              onClick={() => go(x)}
+              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-muted-foreground transition hover:border-indigo-500/50 hover:text-foreground"
+            >
+              {x}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-20 grid grid-cols-1 gap-4 text-left sm:grid-cols-3">
+          {FEATURES.map(([title, body]) => (
+            <div key={title} className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <h3 className="font-semibold">{title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{body}</p>
+            </div>
+          ))}
+        </div>
       </main>
     </div>
   )
 }
-
-export default HomePage
-

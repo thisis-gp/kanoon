@@ -23,6 +23,45 @@ export async function fetchAPI(endpoint, options = {}) {
   }
 }
 
+// ── AILSE v2 API (Postgres/ParadeDB backend) ──────────────────────────────
+
+// Perplexity-style grounded answer across ALL cases.
+// Returns { answer, provider, sources: [{n, case_id, text}], cited: [n...] }
+export async function askQuestion(query, k = 6) {
+  return fetchAPI("/ask", {
+    method: "POST",
+    body: JSON.stringify({ query, k }),
+  });
+}
+
+// Per-case chat — scoped to one judgment. Same shape as askQuestion.
+export async function chatWithCase(caseId, question) {
+  return fetchAPI("/chat_query", {
+    method: "POST",
+    body: JSON.stringify({ case_id: caseId, question }),
+  });
+}
+
+// Raw ranked chunks (no LLM) — for case cards / debugging.
+export async function searchCases(query, k = 10) {
+  const res = await fetchAPI(`/search?q=${encodeURIComponent(query)}&k=${k}`);
+  return res.results;
+}
+
+// Popular recent queries (from search history) for home suggestions.
+export async function getSuggestions() {
+  const res = await fetchAPI("/suggestions")
+  return res.suggestions || []
+}
+
+// Citation graph
+export async function getCites(caseId) {
+  return fetchAPI(`/cases/${caseId}/cites`);
+}
+export async function getCitedBy(caseId) {
+  return fetchAPI(`/cases/${caseId}/cited-by`);
+}
+
 // Search API
 export async function searchLegalCases(query, topK = 5) {
   try {

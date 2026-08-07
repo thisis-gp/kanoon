@@ -28,6 +28,9 @@ groq
 
 # File Processing
 beautifulsoup4
+
+# Postgres / ParadeDB (retrieval store — Slice 1)
+psycopg2-binary
 lxml
 pypdf
 unstructured

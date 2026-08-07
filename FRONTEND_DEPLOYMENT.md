@@ -45,7 +45,7 @@ In **Vercel Dashboard** → **Project Settings** → **Environment Variables**:
 
 ```
 VITE_API_URL=https://y6vgijxxp7.us-east-1.awsapprunner.com
-VITE_APP_NAME=Kanoon
+VITE_APP_NAME=AILSE
 VITE_APP_VERSION=1.0.0
 ```
 

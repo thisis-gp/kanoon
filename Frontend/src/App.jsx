@@ -5,9 +5,9 @@ import { useAuth } from "./context/auth-context"
 
 // Pages
 import HomePage from "./pages/HomePage"
+import ResultsPage from "./pages/ResultsPage"
 import LoginPage from "./pages/LoginPage"
 import SignupPage from "./pages/SignupPage"
-import SearchPage from "./pages/SearchPage"
 import CasePage from "./pages/CasePage"
 import HistoryPage from "./pages/HistoryPage"
 
@@ -30,16 +30,11 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/results" element={<ResultsPage />} />
+      <Route path="/ask" element={<Navigate to="/results" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
-      <Route
-        path="/search"
-        element={
-          <ProtectedRoute>
-            <SearchPage />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/search" element={<Navigate to="/results" replace />} />
       <Route
         path="/case/:id"
         element={

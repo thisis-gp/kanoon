@@ -61,11 +61,12 @@ export function Navbar() {
             {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
+          <Link to="/">
+            <Button variant="ghost">Search</Button>
+          </Link>
+
           {user ? (
             <div className="flex items-center gap-4">
-              <Link to="/search">
-                <Button variant="ghost">Search</Button>
-              </Link>
               <Link to="/history">
                 <Button variant="ghost" className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
@@ -118,6 +119,9 @@ export function Navbar() {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="border-t bg-card px-4 py-2 md:hidden">
+          <Link to="/" className="block w-full">
+            <Button variant="ghost" className="w-full justify-start">Search</Button>
+          </Link>
           {user ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 py-2">
@@ -130,11 +134,6 @@ export function Navbar() {
                 </Avatar>
                 <span className="text-sm font-medium">{user.displayName || user.email}</span>
               </div>
-              <Link to="/search" className="w-full">
-                <Button variant="ghost" className="w-full justify-start">
-                  Search
-                </Button>
-              </Link>
               <Link to="/history" className="w-full">
                 <Button variant="ghost" className="w-full justify-start flex items-center gap-2">
                   <Clock className="h-4 w-4" />

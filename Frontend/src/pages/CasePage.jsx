@@ -7,6 +7,7 @@ import { Navbar } from "../components/navbar"
 import { PDFViewerComponent } from "../components/pdf-viewer"
 import { ChatInterface } from "../components/chat-interface"
 import { CaseSummary } from "../components/case-summary"
+import CitationsPanel from "../components/citations-panel"
 import {
   SidebarProvider,
   Sidebar,
@@ -121,9 +122,11 @@ export default function CasePage() {
           </Sidebar>
 
           <div className="flex-1 overflow-hidden">
-            <div className="flex h-15 items-center border-b px-4">
+            <div className="flex h-14 items-center border-b border-white/10 px-4">
               <SidebarTrigger className="mr-2" />
-              <h1 className="text-lg font-semibold">{isLoading ? "Loading..." : caseData?.title || "Case Details"}</h1>
+              <h1 className="text-lg font-semibold text-foreground truncate">
+                {isLoading ? "Loading..." : caseData?.title || "Case Details"}
+              </h1>
             </div>
 
             <div className="h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -155,6 +158,9 @@ export default function CasePage() {
 
                   <TabsContent value="summary" className="h-[calc(100vh-7rem)] overflow-auto">
                     <CaseSummary caseData={caseData} isLoading={isLoading} />
+                    <div className="p-4 pt-0">
+                      <CitationsPanel caseId={id} />
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="chat" className="h-[calc(100vh-7rem)] overflow-hidden">
@@ -180,6 +186,9 @@ export default function CasePage() {
                 {activeTab === "summary" && (
                   <div className="h-full overflow-auto">
                     <CaseSummary caseData={caseData} isLoading={isLoading} />
+                    <div className="p-4 pt-0">
+                      <CitationsPanel caseId={id} />
+                    </div>
                   </div>
                 )}
 

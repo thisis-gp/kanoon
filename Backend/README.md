@@ -2,7 +2,7 @@ Backend – FastAPI, FAISS, Qdrant
 
 Overview
 
-This service powers Kanoon’s semantic search and per‑case chat. It exposes REST endpoints via FastAPI, loads pre‑built FAISS indexes for each case, and integrates with Qdrant Cloud for global search across all documents.
+This service powers AILSE's semantic search and per‑case chat. It exposes REST endpoints via FastAPI, loads pre‑built FAISS indexes for each case, and integrates with Qdrant Cloud for global search across all documents.
 
 Project Report
 
@@ -48,8 +48,8 @@ Notes on Embeddings
 Docker
 
 ```bash
-docker build -t kanoon-backend .
-docker run -p 8000:8000 --env-file .env kanoon-backend
+docker build -t ailse-backend .
+docker run -p 8000:8000 --env-file .env ailse-backend
 ```
 
 Deployment (AWS App Runner)

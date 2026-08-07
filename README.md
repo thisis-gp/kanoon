@@ -1,8 +1,8 @@
-Kanoon – Legal Case Search & Chat
+AILSE – AI-based Legal Search Engine
 
 Overview
 
-Kanoon is a full‑stack legal research assistant for Indian Supreme Court cases. It provides fast semantic search, per‑case chat grounded on FAISS indexes, and global search powered by Qdrant. The backend is deployed on AWS App Runner; the frontend is deployed on Vercel.
+AILSE (AI-based Legal Search Engine) is a full‑stack legal research assistant for Indian Supreme Court cases. It provides fast semantic search, per‑case chat grounded on FAISS indexes, and global search powered by Qdrant. The backend is deployed on AWS App Runner; the frontend is deployed on Vercel.
 
 Project Report
 
