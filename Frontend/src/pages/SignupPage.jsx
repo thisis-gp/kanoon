@@ -8,7 +8,7 @@ import { Navbar } from "../components/navbar"
 export default function SignupPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const { loginWithGoogle, user } = useAuth()
+  const { loginWithGoogle, user, loginAvailable } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -39,15 +39,20 @@ export default function SignupPage() {
           <h1 className="text-2xl font-bold">Kanoon</h1>
           <p className="mt-2 text-sm text-muted-foreground">Create your account</p>
 
-          {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+          {!loginAvailable && (
+            <p role="status" className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+              Login is not available in this deployment. Search and case pages work without an account.
+            </p>
+          )}
+          {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
 
           <button
             type="button"
             onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full rounded-lg bg-white text-gray-900 font-semibold py-3 hover:bg-gray-100 flex items-center justify-center gap-2 mt-6 disabled:opacity-70"
+            disabled={loading || !loginAvailable}
+            className="w-full rounded-lg bg-white text-gray-900 font-semibold py-3 hover:bg-gray-100 flex items-center justify-center gap-2 mt-6 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <svg width="18" height="18" viewBox="0 0 48 48">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
               <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.7 30.1 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.8 6C12.3 13.2 17.7 9.5 24 9.5z" />
               <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.6 6.9l7.1 5.5C43.2 37.3 46.1 31.5 46.1 24.5z" />
               <path fill="#FBBC05" d="M10.4 28.3c-.5-1.4-.7-2.9-.7-4.3s.3-2.9.7-4.3l-7.8-6C.9 16.9 0 20.3 0 24s.9 7.1 2.6 10.3l7.8-6z" />

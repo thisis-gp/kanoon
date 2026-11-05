@@ -6,6 +6,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 export default [
   { ignores: ['dist'] },
   {
+    files: ['*.config.js'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
       ecmaVersion: 2020,
@@ -29,5 +33,10 @@ export default [
         { allowConstantExport: true },
       ],
     },
+  },
+  {
+    // context modules export a provider and its hook together
+    files: ['src/context/**/*.jsx', 'src/components/ui/**/*.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
 ]

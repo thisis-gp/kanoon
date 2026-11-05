@@ -16,6 +16,10 @@ CLI:
 import os
 import re
 import sys
+import threading
+from contextlib import closing, contextmanager
+
+from model.errors import Busy
 
 # psycopg2 imported lazily inside DB methods so the pure chunker works without it
 
@@ -26,7 +30,70 @@ RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 DIM = 384
 TARGET_CHARS = 1000        # ~256 tokens for MiniLM
 OVERLAP_SENTENCES = 1
-CAND = 50                  # candidates per method + rerank depth
+CAND = 50                  # candidates per method
+RERANK_DEPTH = int(os.getenv("RERANK_DEPTH", str(CAND)))   # fused candidates sent to the cross-encoder
+# Bound concurrent model inference: parallel torch calls only add memory (OOM under the 2 GB cap), not speed, on 2 cores.
+_INFER = threading.Semaphore(int(os.getenv("INFER_CONCURRENCY", "1")))
+# A request waits at most this long for an inference slot, then gets HTTP 503 (Busy) instead of piling up.
+INFER_QUEUE_TIMEOUT = float(os.getenv("INFER_QUEUE_TIMEOUT", "5"))
+# DB connection pool: at most DB_POOL_MAX connections per process (docker-compose.vm.yml sets Postgres
+# max_connections well above this). Callers wait DB_POOL_TIMEOUT seconds for a free one, then get 503.
+DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "10"))
+DB_POOL_TIMEOUT = float(os.getenv("DB_POOL_TIMEOUT", "5"))
+
+
+@contextmanager
+def infer_slot():
+    """Hold the inference semaphore, or raise Busy after INFER_QUEUE_TIMEOUT seconds."""
+    if not _INFER.acquire(timeout=INFER_QUEUE_TIMEOUT):
+        raise Busy("inference busy", retry_after=max(1, int(INFER_QUEUE_TIMEOUT)))
+    try:
+        yield
+    finally:
+        _INFER.release()
+
+
+_pools = {}                       # dsn -> (ThreadedConnectionPool, BoundedSemaphore)
+_pools_lock = threading.Lock()
+
+
+def _pool_for(dsn):
+    with _pools_lock:
+        if dsn not in _pools:
+            from psycopg2.pool import ThreadedConnectionPool
+            _pools[dsn] = (ThreadedConnectionPool(1, DB_POOL_MAX, dsn),
+                           threading.BoundedSemaphore(DB_POOL_MAX))
+        return _pools[dsn]
+
+
+class PooledConn:
+    """A pooled psycopg2 connection. close() returns it to the pool (idempotent); `with conn:` keeps the
+    psycopg2 meaning (commit or roll back). Always use `with closing(engine._conn()) as c:`."""
+
+    def __init__(self, conn, pool, slots):
+        self._conn, self._pool, self._slots = conn, pool, slots
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        self._conn.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._conn.__exit__(*exc)
+
+    def close(self):
+        conn, self._conn = self._conn, None
+        if conn is None:
+            return
+        try:
+            broken = conn.closed != 0
+            if not broken:
+                conn.rollback()             # never hand back an open transaction
+            self._pool.putconn(conn, close=broken)
+        finally:
+            self._slots.release()
 
 SCHEMA_SQL = f"""
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -109,11 +176,18 @@ class RetrievalEngine:
         self._cache = {}          # (query, k, case_id) -> results; bounded below
 
     def _conn(self):
-        import psycopg2
-        return psycopg2.connect(self.dsn)
+        """A pooled connection. Use as `with closing(self._conn()) as c, c: ...` so it goes back."""
+        pool, slots = _pool_for(self.dsn)
+        if not slots.acquire(timeout=DB_POOL_TIMEOUT):
+            raise Busy("database busy", retry_after=max(1, int(DB_POOL_TIMEOUT)))
+        try:
+            return PooledConn(pool.getconn(), pool, slots)
+        except BaseException:
+            slots.release()
+            raise
 
     def init_db(self):
-        with self._conn() as c, c.cursor() as cur:
+        with closing(self._conn()) as c, c, c.cursor() as cur:
             cur.execute(SCHEMA_SQL)
         print("[init] schema + extensions + indexes ready")
 
@@ -150,7 +224,7 @@ class RetrievalEngine:
 
     def _dense(self, cur, qvec, n, case_id):
         where = "WHERE case_id = %s" if case_id else ""
-        params = [qvec] + ([case_id] if case_id else []) + [n]
+        params = ([case_id] if case_id else []) + [qvec, n]   # SQL order: WHERE case_id, ORDER BY embedding, LIMIT
         cur.execute(f"""
             SELECT id, case_id, text
             FROM chunks {where}
@@ -171,34 +245,47 @@ class RetrievalEngine:
         """, params)
         return cur.fetchall()
 
+    def _bm25_safe(self, conn, cur, query, case_id):
+        """BM25 with a fallback: brackets, quotes and colons are query syntax in pg_search,
+        so a raw legal citation can fail to parse. Retry once with plain words, then give up."""
+        plain = re.sub(r"[^\w\s]", " ", query, flags=re.UNICODE).strip()
+        for attempt in dict.fromkeys([query, plain]):
+            if not attempt:
+                continue
+            try:
+                return self._bm25(cur, attempt, CAND, case_id)
+            except Exception as e:                # parse error, pg_search missing, API drift
+                # log only the exception type: the message can contain the user's query
+                print(f"[warn] BM25 failed ({type(e).__name__})", file=sys.stderr)
+                conn.rollback()                   # a failed statement aborts the transaction
+        return []
+
     def search(self, query, k=10, case_id=None):
         """Return [{case_id, text, score}] — hybrid RRF + cross-encoder rerank.
         case_id is None for global 'ask', or a case for per-case chat scope."""
         ckey = (query, k, case_id)
         if ckey in self._cache:
             return self._cache[ckey]
-        qvec = _vec_literal(_embed().encode([query], normalize_embeddings=True,
-                                            convert_to_numpy=True)[0])
-        with self._conn() as c, c.cursor() as cur:
+        with infer_slot():
+            qvec = _vec_literal(_embed().encode([query], normalize_embeddings=True,
+                                                convert_to_numpy=True)[0])
+        with closing(self._conn()) as c, c, c.cursor() as cur:
             dense = self._dense(cur, qvec, CAND, case_id)
-            try:
-                sparse = self._bm25(cur, query, CAND, case_id)
-            except Exception as e:                # pg_search missing / API drift
-                print(f"[warn] BM25 unavailable ({e}); dense-only", file=sys.stderr)
-                sparse = []
+            sparse = self._bm25_safe(c, cur, query, case_id)
         # RRF fuse on chunk id
         text_of, kk, score = {}, 60, {}
         for lst in (dense, sparse):
             for rank, (cid, case, text) in enumerate(lst):
                 text_of[cid] = (case, text)
                 score[cid] = score.get(cid, 0.0) + 1.0 / (kk + rank)
-        fused = sorted(score, key=score.get, reverse=True)[:CAND]
+        fused = sorted(score, key=score.get, reverse=True)[:RERANK_DEPTH]
         if not fused:
             self._cache[ckey] = []
             return []
         # cross-encoder rerank
         pairs = [(query, text_of[cid][1]) for cid in fused]
-        rr = _rerank().predict(pairs)
+        with infer_slot():
+            rr = _rerank().predict(pairs, batch_size=16)
         order = sorted(range(len(fused)), key=lambda i: rr[i], reverse=True)[:k]
         result = [{"case_id": text_of[fused[i]][0],
                    "text": text_of[fused[i]][1],

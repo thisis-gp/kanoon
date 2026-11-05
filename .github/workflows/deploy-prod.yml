@@ -1,17 +1,19 @@
-name: Deploy to AWS
+# =====================================================================================
+# LEGACY AND DISABLED. DO NOT RE-ENABLE.
+# This workflow deployed the old Qdrant backend to AWS App Runner with long-lived AWS access
+# keys. The project now runs on the VM stack (docker-compose.vm.yml, docs/DEPLOY-VM.md), so
+# it only runs when started by hand (workflow_dispatch) and it no longer triggers on push or
+# pull request. If AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, GROQ_API_KEY,
+# QDRANT_CLOUD_URL or QDRANT_CLOUD_API_KEY ever existed as GitHub secrets, rotate them and
+# delete them: see docs/SECURITY.md. Kept only as a reference for the old deployment.
+# =====================================================================================
+name: Deploy to AWS (legacy, disabled)
 
 on:
-  push:
-    branches: [ prod ]
-    paths:
-      - 'Backend/**'
-      - '.github/workflows/deploy-prod.yml'
-  pull_request:
-    types: [closed]
-    branches: [ prod ]
-    paths:
-      - 'Backend/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   AWS_REGION: us-east-1
@@ -23,17 +25,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/prod') ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'prod') ||
-      github.event_name == 'workflow_dispatch'
-    
+    if: github.event_name == 'workflow_dispatch'
+
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
       
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v4.0.2
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -41,7 +40,7 @@ jobs:
         
     - name: Login to Amazon ECR
       id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+      uses: aws-actions/amazon-ecr-login@v2.0.1
       
     - name: Clean up Docker environment
       run: |

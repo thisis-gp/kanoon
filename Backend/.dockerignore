@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+supreme_court_pdfs/
+supreme_court_texts/
+faiss_index/
+clean/
+test/_tmp_corpus/

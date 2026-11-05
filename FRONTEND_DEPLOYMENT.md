@@ -1,5 +1,8 @@
 # Frontend Vercel Deployment Guide
 
+> **Updated for the current stack.** The frontend is a Vite app that calls the backend through `VITE_API_URL`. Two ways to host it: bundled into the backend image (same origin, see [docs/DEPLOY-VM.md](docs/DEPLOY-VM.md)) or on Vercel with `VITE_API_URL` pointing at wherever the backend is reachable (for example a tunnel URL). The `awsapprunner.com` URL and the `VITE_APP_NAME` / `VITE_APP_VERSION` settings in older versions of this guide are outdated: the AWS backend is gone and the app does not read those two variables. The Firebase variables are required for login; see [Frontend/README.md](Frontend/README.md) for the full list.
+> Note: `Frontend/env.example` mentioned below is now `Frontend/env.sample`.
+
 ## **🚀 Complete Setup Steps**
 
 ### **Step 1: Vercel Account Setup**
@@ -12,7 +15,7 @@
    - Framework Preset: `Vite`
    - Build Command: `npm run build`
    - Output Directory: `dist`
-   - Install Command: `npm ci`
+   - Install Command: `npm ci` (or `npm install`)
 
 ### **Step 2: Get Vercel Credentials**
 
@@ -44,9 +47,14 @@ For the `frontend` environment:
 In **Vercel Dashboard** → **Project Settings** → **Environment Variables**:
 
 ```
-VITE_API_URL=https://y6vgijxxp7.us-east-1.awsapprunner.com
-VITE_APP_NAME=AILSE
-VITE_APP_VERSION=1.0.0
+VITE_API_URL=https://<your-backend-origin>    # no trailing slash
+VITE_FIREBASE_API_KEY=...                       # and the other VITE_FIREBASE_* values
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+VITE_FIREBASE_DATABASE_URL=...
 ```
 
 ### **Step 6: Test Deployment**
@@ -68,7 +76,7 @@ Frontend/
 ├── Dockerfile              # Docker configuration
 ├── .dockerignore           # Docker ignore file
 ├── vercel.json            # Vercel configuration
-├── env.example            # Environment variables template
+├── env.sample             # Environment variables template
 └── package.json           # Updated with start script
 
 .github/workflows/
@@ -151,3 +159,10 @@ After deployment, you'll get:
 5. **Configure custom domain** (optional)
 
 **Your frontend will be live on Vercel!** 🚀
+
+## Backend side of a Vercel deployment
+
+- Set `CORS_ALLOWED_ORIGINS=https://<your-vercel-domain>` in the backend environment and restart it. Without this the browser blocks the API calls.
+- Add the Vercel domain to Firebase "Authorized domains", or Google login fails.
+- The case PDFs must ship with the frontend build (`Frontend/public/supreme_court_pdfs/`, large and not in git) because the viewer loads them from the page origin.
+- If the backend is behind an ngrok tunnel, the frontend already sends the `ngrok-skip-browser-warning` header on API calls.

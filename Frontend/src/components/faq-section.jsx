@@ -51,7 +51,7 @@ const PREDEFINED_QUESTIONS = [
   },
 ]
 
-export function FAQSection({ caseId, caseData, isLoading, onSendMessage, onTabChange }) {
+export function FAQSection({ caseId, isLoading, onSendMessage, onTabChange }) {
   const [questions, setQuestions] = useState(PREDEFINED_QUESTIONS)
   const [activeQuestion, setActiveQuestion] = useState(null)
   const [loadingQuestionId, setLoadingQuestionId] = useState(null)
@@ -73,8 +73,7 @@ export function FAQSection({ caseId, caseData, isLoading, onSendMessage, onTabCh
         prevQuestions.map((q) => (q.id === questionId ? { ...q, answer: response.text } : q)),
       )
     } catch (err) {
-      console.error("Error fetching answer:", err)
-      setError("Failed to get an answer. Please try again.")
+      setError(err?.message || "Failed to get an answer. Please try again.")
     } finally {
       setLoadingQuestionId(null)
     }
@@ -132,19 +131,25 @@ export function FAQSection({ caseId, caseData, isLoading, onSendMessage, onTabCh
           <div className="space-y-2">
             {questions.map((q) => (
               <div key={q.id} className="border rounded-md">
-                <div
-                  className={`flex justify-between items-center p-4 cursor-pointer ${
-                    activeQuestion === q.id ? "bg-accent" : ""
-                  }`}
-                  onClick={() => handleQuestionClick(q.id, q.question)}
-                >
-                  <h3 className="font-medium">{q.question}</h3>
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${activeQuestion === q.id ? "transform rotate-180" : ""}`}
-                  />
-                </div>
+                <h3>
+                  <button
+                    type="button"
+                    aria-expanded={activeQuestion === q.id}
+                    aria-controls={`faq-panel-${q.id}`}
+                    className={`flex w-full items-center justify-between gap-3 p-4 text-left font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 ${
+                      activeQuestion === q.id ? "bg-accent" : ""
+                    }`}
+                    onClick={() => handleQuestionClick(q.id, q.question)}
+                  >
+                    <span>{q.question}</span>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={`h-4 w-4 shrink-0 transition-transform ${activeQuestion === q.id ? "transform rotate-180" : ""}`}
+                    />
+                  </button>
+                </h3>
                 {activeQuestion === q.id && (
-                  <div className="p-4 pt-0 border-t">
+                  <div id={`faq-panel-${q.id}`} className="p-4 pt-0 border-t">
                     {loadingQuestionId === q.id ? (
                       <div className="py-4">
                         <div className="flex items-center space-x-2">
@@ -165,7 +170,7 @@ export function FAQSection({ caseId, caseData, isLoading, onSendMessage, onTabCh
       </Card>
 
       <div className="mt-6">
-        <h3 className="text-lg font-medium mb-2">Can't find what you're looking for?</h3>
+        <h2 className="text-lg font-medium mb-2">Can't find what you're looking for?</h2>
         <p className="text-muted-foreground mb-4">
           If you have a specific question that's not covered here, you can ask it directly in the chat tab.
         </p>

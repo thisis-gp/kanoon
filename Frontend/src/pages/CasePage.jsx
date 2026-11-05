@@ -1,7 +1,21 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams } from "react-router-dom"
+
+const DESKTOP_QUERY = "(min-width: 768px)"
+
+// Render one layout at a time so ids and chat state are not duplicated.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia(DESKTOP_QUERY).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_QUERY)
+    const onChange = (e) => setIsDesktop(e.matches)
+    mq.addEventListener("change", onChange)
+    return () => mq.removeEventListener("change", onChange)
+  }, [])
+  return isDesktop
+}
+import { useParams, Link } from "react-router-dom"
 import { useAuth } from "../context/auth-context"
 import { Navbar } from "../components/navbar"
 import { PDFViewerComponent } from "../components/pdf-viewer"
@@ -19,9 +33,12 @@ import {
 } from "../components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { FileText, MessageSquare, FileSearch, AlertCircle } from "lucide-react"
-import { getCaseById, sendChatMessage } from "../utils/api"
+import { getCaseById, sendChatMessage, describeError } from "../utils/api"
+import { displayTitle } from "../lib/utils"
 import { saveChatMessage } from "../utils/firebase-helpers"
 import { FAQSection } from "../components/faq-section"
+import { Footer } from "../components/footer"
+import { Disclaimer } from "../components/disclaimer"
 
 export default function CasePage() {
   const { id } = useParams()
@@ -30,6 +47,7 @@ export default function CasePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState("document")
+  const isDesktop = useIsDesktop()
 
   useEffect(() => {
     const loadCaseData = async () => {
@@ -39,11 +57,9 @@ export default function CasePage() {
       try {
         // Load case details
         const data = await getCaseById(id)
-        console.log("Loaded case data:", data)
         setCaseData(data)
       } catch (error) {
-        console.error("Error fetching case data:", error)
-        setError("Failed to load case data. Please try again later.")
+        setError(describeError(error))
       } finally {
         setIsLoading(false)
       }
@@ -54,7 +70,6 @@ export default function CasePage() {
 
   const handleSendMessage = async (message) => {
     try {
-
       // Send message to backend
       const response = await sendChatMessage(id, message)
 
@@ -66,25 +81,25 @@ export default function CasePage() {
           timestamp: new Date().toISOString(),
         }
 
-        await saveChatMessage(user.uid, id, messageObj)
+        saveChatMessage(user.uid, id, messageObj).catch(() => {})
       }
 
       return { text: response.answer }
     } catch (error) {
-      console.error("Error sending message:", error)
-      throw error
+      throw new Error(describeError(error))
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <Navbar />
 
       {error ? (
         <div className="container mx-auto px-4 py-12 text-center">
           <div className="flex flex-col items-center justify-center">
             <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-            <p className="text-destructive text-lg">{error}</p>
+            <p role="alert" className="text-destructive text-lg">{error}</p>
+            <Link to="/" className="mt-4 text-indigo-300 underline">Back to search</Link>
           </div>
         </div>
       ) : (
@@ -125,13 +140,16 @@ export default function CasePage() {
             <div className="flex h-14 items-center border-b border-white/10 px-4">
               <SidebarTrigger className="mr-2" />
               <h1 className="text-lg font-semibold text-foreground truncate">
-                {isLoading ? "Loading..." : caseData?.title || "Case Details"}
+                {isLoading ? "Loading..." : displayTitle(caseData?.title, id)}
               </h1>
             </div>
+            <div className="border-b border-white/10 px-4 py-2">
+              <Disclaimer />
+            </div>
 
-            <div className="h-[calc(100vh-3.5rem)] overflow-hidden">
-              {/* Mobile Tabs */}
-              <div className="md:hidden">
+            <div className="h-[calc(100dvh-11rem)] overflow-hidden">
+              {!isDesktop && (
+              <div>
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full">
                     <TabsTrigger value="document" className="flex-1">
@@ -152,25 +170,24 @@ export default function CasePage() {
                     </TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="document" className="h-[calc(100vh-7rem)] overflow-hidden">
+                  <TabsContent value="document" className="h-[calc(100dvh-14rem)] overflow-hidden">
                     {caseData?.pdfUrl && <PDFViewerComponent pdfUrl={caseData.pdfUrl} />}
                   </TabsContent>
 
-                  <TabsContent value="summary" className="h-[calc(100vh-7rem)] overflow-auto">
+                  <TabsContent value="summary" className="h-[calc(100dvh-14rem)] overflow-auto">
                     <CaseSummary caseData={caseData} isLoading={isLoading} />
                     <div className="p-4 pt-0">
                       <CitationsPanel caseId={id} />
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="chat" className="h-[calc(100vh-7rem)] overflow-hidden">
+                  <TabsContent value="chat" className="h-[calc(100dvh-14rem)] overflow-hidden">
                     <ChatInterface caseId={id} onSendMessage={handleSendMessage} />
                   </TabsContent>
 
-                  <TabsContent value="faq" className="h-[calc(100vh-7rem)] overflow-hidden">
+                  <TabsContent value="faq" className="h-[calc(100dvh-14rem)] overflow-hidden">
                     <FAQSection
                       caseId={id}
-                      caseData={caseData}
                       isLoading={isLoading}
                       onSendMessage={handleSendMessage}
                       onTabChange={setActiveTab}
@@ -178,9 +195,10 @@ export default function CasePage() {
                   </TabsContent>
                 </Tabs>
               </div>
+              )}
 
-              {/* Desktop View */}
-              <div className="hidden md:block h-full">
+              {isDesktop && (
+              <div className="h-full">
                 {activeTab === "document" && caseData?.pdfUrl && <PDFViewerComponent pdfUrl={caseData.pdfUrl} />}
 
                 {activeTab === "summary" && (
@@ -197,13 +215,13 @@ export default function CasePage() {
                 {activeTab === "faq" && (
                   <FAQSection
                     caseId={id}
-                    caseData={caseData}
                     isLoading={isLoading}
                     onSendMessage={handleSendMessage}
                     onTabChange={setActiveTab}
                   />
                 )}
               </div>
+              )}
             </div>
           </div>
         </SidebarProvider>

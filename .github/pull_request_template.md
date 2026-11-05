@@ -37,4 +37,4 @@
 @username1 @username2
 
 ## 🚀 Deployment
-<!-- This PR will trigger automatic deployment to AWS App Runner after merge -->
+<!-- Merging to prod triggers the Vercel frontend workflow. The App Runner backend workflow is legacy; see docs/DEPLOY-VM.md -->

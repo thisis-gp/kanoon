@@ -1,5 +1,9 @@
 # AILSE Deployment Guide
 
+> **Current deployment: see [docs/DEPLOY-VM.md](docs/DEPLOY-VM.md).** Kanoon now runs as two Docker containers (ParadeDB and the FastAPI app that also serves the React build) from `docker-compose.vm.yml`, with no public ports and access through a tunnel. The AWS ECR and App Runner pipeline described below is the **earlier design** (FAISS, Qdrant and Groq). It is kept for history. `Backend/Dockerfile` itself now runs `model.api:app`, but the old pipeline also assumes a hosted database that this repository no longer provisions, so it is not a working path as written. `.github/workflows/deploy-prod.yml` still targets App Runner and is outdated.
+
+## Legacy: AWS App Runner pipeline
+
 This document explains the CI/CD pipeline setup for the AILSE (AI-based Legal Search Engine) legal search application.
 
 ## Branch Structure
@@ -40,9 +44,8 @@ This document explains the CI/CD pipeline setup for the AILSE (AI-based Legal Se
 Add these secrets to your GitHub repository:
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
-- `GROQ_API_KEY`
-- `QDRANT_CLOUD_URL`
-- `QDRANT_CLOUD_API_KEY`
+- (legacy, no longer used by the code) `GROQ_API_KEY`, `QDRANT_CLOUD_URL`, `QDRANT_CLOUD_API_KEY`
+- Current code reads `NVIDIA_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` and `DATABASE_URL`; see [Backend/README.md](Backend/README.md)
 
 ## Deployment Workflow
 

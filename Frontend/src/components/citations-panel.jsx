@@ -19,13 +19,13 @@ export default function CitationsPanel({ caseId }) {
         const res = await getCites(caseId)
         citesData = res?.cites || []
       } catch (error) {
-        console.error("Error fetching cites:", error)
+        console.warn("Could not load cites", error?.kind || "")
       }
       try {
         const res = await getCitedBy(caseId)
         citedByData = res?.cited_by || []
       } catch (error) {
-        console.error("Error fetching cited-by:", error)
+        console.warn("Could not load cited-by", error?.kind || "")
       }
       if (active) {
         setCites(citesData)

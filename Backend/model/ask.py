@@ -15,6 +15,7 @@ CLI:  python ask.py "your question" [case_id]
 import json
 import re
 import sys
+from contextlib import closing
 
 from model.retrieval import RetrievalEngine
 from model import llm_gateway
@@ -49,8 +50,7 @@ def _ensure_cache():
     global _cache_ready
     if _cache_ready:
         return
-    conn = _eng()._conn()
-    with conn, conn.cursor() as cur:
+    with closing(_eng()._conn()) as conn, conn, conn.cursor() as cur:
         cur.execute("CREATE TABLE IF NOT EXISTS answer_cache ("
                     "cache_key TEXT PRIMARY KEY, response JSONB NOT NULL, "
                     "created_at TIMESTAMPTZ DEFAULT now())")
@@ -59,8 +59,7 @@ def _ensure_cache():
 def _cache_get(cache_key):
     try:
         _ensure_cache()
-        conn = _eng()._conn()
-        with conn, conn.cursor() as cur:
+        with closing(_eng()._conn()) as conn, conn, conn.cursor() as cur:
             cur.execute("SELECT response FROM answer_cache WHERE cache_key=%s", (cache_key,))
             row = cur.fetchone()
             return row[0] if row else None   # JSONB -> dict
@@ -70,8 +69,7 @@ def _cache_get(cache_key):
 def _cache_put(cache_key, res):
     try:
         _ensure_cache()
-        conn = _eng()._conn()
-        with conn, conn.cursor() as cur:
+        with closing(_eng()._conn()) as conn, conn, conn.cursor() as cur:
             cur.execute("INSERT INTO answer_cache (cache_key, response) "
                         "VALUES (%s, %s::jsonb) ON CONFLICT DO NOTHING",
                         (cache_key, json.dumps(res)))

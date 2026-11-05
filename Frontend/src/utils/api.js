@@ -1,166 +1,145 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// Empty or unset VITE_API_URL means same origin (the backend serves this build).
+// On Vercel, set it to the API origin, for example https://example.ngrok-free.dev
+// Optional bucket base for judgment PDFs (e.g. Oracle Object Storage). Unset = same-origin /supreme_court_pdfs.
+export const PDF_BASE_URL = (import.meta.env.KANOON_PDF_BASE_URL ?? "").trim().replace(/\/+$/, "")
 
-export async function fetchAPI(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
-  const defaultOptions = {
-    headers: {
-      "Content-Type": "application/json",
-    },
-  };
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "")
 
-  try {
-    const response = await fetch(url, { ...defaultOptions, ...options });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || "API request failed");
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error("API Error:", error);
-    throw error;
+export const ABSTAIN_TEXT = "Not available in the sources."
+const DEFAULT_RETRY_SECONDS = 30
+
+/** Error with a status code and a message that is safe to show to users. */
+export class ApiError extends Error {
+  constructor(kind, message, { status = 0, retryAfter = null } = {}) {
+    super(message)
+    this.name = "ApiError"
+    this.kind = kind // "rate_limit" | "unavailable" | "network" | "bad_request" | "server"
+    this.status = status
+    this.retryAfter = retryAfter
   }
 }
 
-// ── AILSE v2 API (Postgres/ParadeDB backend) ──────────────────────────────
+function formatWait(seconds) {
+  if (seconds < 90) return `${seconds} seconds`
+  if (seconds < 5400) return `${Math.round(seconds / 60)} minutes`
+  return `${Math.round(seconds / 3600)} hours`
+}
 
-// Perplexity-style grounded answer across ALL cases.
+async function toApiError(response) {
+  let detail = ""
+  try {
+    const body = await response.json()
+    detail = typeof body?.detail === "string" ? body.detail : ""
+  } catch {
+    // body is not JSON; fall back to the status text
+  }
+  const { status } = response
+
+  if (status === 429) {
+    const parsed = Number.parseInt(response.headers.get("Retry-After") ?? "", 10)
+    const retryAfter = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RETRY_SECONDS
+    return new ApiError("rate_limit", `Too many requests. Please try again in ${formatWait(retryAfter)}.`, {
+      status,
+      retryAfter,
+    })
+  }
+  if (status === 503) {
+    return new ApiError(
+      "unavailable",
+      "The answer service is busy or unavailable. Search results still work.",
+      { status },
+    )
+  }
+  if (status === 400 || status === 422) {
+    return new ApiError("bad_request", detail || "That request could not be processed.", { status })
+  }
+  return new ApiError("server", detail || "Something went wrong on the server. Please try again.", { status })
+}
+
+export async function fetchAPI(endpoint, options = {}) {
+  const url = `${API_BASE_URL}${endpoint}`
+  let response
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "1",
+        ...(options.headers || {}),
+      },
+    })
+  } catch (error) {
+    if (error?.name === "AbortError") throw error
+    throw new ApiError("network", "Cannot reach the server. Check your connection and try again.")
+  }
+  if (!response.ok) throw await toApiError(response)
+  try {
+    return await response.json()
+  } catch {
+    throw new ApiError("server", "The server sent an unreadable response.", { status: response.status })
+  }
+}
+
+/** Message to show for any thrown value. */
+export function describeError(error) {
+  return error instanceof ApiError ? error.message : "Something went wrong. Please try again."
+}
+
+/** True when the backend declined to answer because the sources had nothing. */
+export function isAbstention(result) {
+  return typeof result?.answer === "string" && result.answer.trim() === ABSTAIN_TEXT
+}
+
+// Grounded answer across all cases.
 // Returns { answer, provider, sources: [{n, case_id, text}], cited: [n...] }
-export async function askQuestion(query, k = 6) {
-  return fetchAPI("/ask", {
-    method: "POST",
-    body: JSON.stringify({ query, k }),
-  });
+export function askQuestion(query, k = 6) {
+  return fetchAPI("/ask", { method: "POST", body: JSON.stringify({ query, k }) })
 }
 
-// Per-case chat — scoped to one judgment. Same shape as askQuestion.
-export async function chatWithCase(caseId, question) {
-  return fetchAPI("/chat_query", {
-    method: "POST",
-    body: JSON.stringify({ case_id: caseId, question }),
-  });
+// Per-case chat, scoped to one judgment. Same shape as askQuestion.
+export function sendChatMessage(caseId, question) {
+  return fetchAPI("/chat_query", { method: "POST", body: JSON.stringify({ case_id: caseId, question }) })
 }
 
-// Raw ranked chunks (no LLM) — for case cards / debugging.
-export async function searchCases(query, k = 10) {
-  const res = await fetchAPI(`/search?q=${encodeURIComponent(query)}&k=${k}`);
-  return res.results;
-}
-
-// Popular recent queries (from search history) for home suggestions.
+// Popular recent queries for home suggestions.
 export async function getSuggestions() {
   const res = await fetchAPI("/suggestions")
   return res.suggestions || []
 }
 
 // Citation graph
-export async function getCites(caseId) {
-  return fetchAPI(`/cases/${caseId}/cites`);
+export function getCites(caseId) {
+  return fetchAPI(`/cases/${encodeURIComponent(caseId)}/cites`)
 }
-export async function getCitedBy(caseId) {
-  return fetchAPI(`/cases/${caseId}/cited-by`);
+export function getCitedBy(caseId) {
+  return fetchAPI(`/cases/${encodeURIComponent(caseId)}/cited-by`)
 }
 
-// Search API
+// Case cards for a query (no LLM, fast)
 export async function searchLegalCases(query, topK = 5) {
-  try {
-    const response = await fetchAPI("/query", {
-      method: "POST",
-      body: JSON.stringify({
-        query: query,
-        top_k: topK
-      }),
-    });
-
-    return response.results.map(result => ({
-      id: result.id,
-      title: result.title,
-      judges: result.judges,
-      date: result.date,
-      summary: result.summary,
-      source: result.source
-    }));
-  } catch (error) {
-    console.error("Search error:", error);
-    throw error;
-  }
-}
-
-// Case Metadata API
-export async function getCaseMetadata(source) {
-  return fetchAPI("/structured_query", {
+  const response = await fetchAPI("/query", {
     method: "POST",
-    body: JSON.stringify({
-      text: "", // Text can be empty if using cached data
-      source: source
-    }),
-  });
-}
-
-// Document Management API
-export async function uploadLegalDocuments(filePath) {
-  return fetchAPI("/add-documents", {
-    method: "POST",
-    body: JSON.stringify({ file_path: filePath }),
-  });
-}
-
-// Chat API
-export async function initializeCaseChat(caseId) {
-  return fetchAPI("/chat_init", {
-    method: "POST",
-    body: JSON.stringify({ case_id: caseId }),
-  });
-}
-
-export async function sendChatMessage(caseId, question) {
-  return fetchAPI(`/chat_query`, {
-    method: "POST",
-    body: JSON.stringify({
-      case_id: caseId,
-      question: question
-    }),
-  });
-}
-
-// Text-to-Speech API
-export async function textToSpeech(text) {
-  // This would be implemented on your backend
-  // For now, we'll create a simple endpoint that would use gTTS
-  return fetchAPI("/text-to-speech", {
-    method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ query, top_k: topK }),
   })
+  return (response.results || []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    judges: r.judges,
+    date: r.date,
+    summary: r.summary,
+    source: r.source,
+  }))
 }
 
-// Additional Helper Functions
-export async function getFullCaseDetails(source) {
-  const metadata = await getCaseMetadata(source);
-  
-  return {
-    ...metadata.data,
-    pdfUrl: `/documents/${source}.pdf`, // Example PDF URL pattern
-    relatedCases: await searchLegalCases(metadata.data.title, 3)
-  };
-}
-
- // Update getCaseById function
+// Case metadata. The backend sends id, title, judges, date, summary; the PDF path is built here.
 export async function getCaseById(id) {
-    const response = await fetchAPI(`/cases/${id}`);
-    console.log("Case API response:", response)
-    
-    // Backend only sends: id, title, judges, date, summary
-    // Frontend generates the PDF URLs
-    const result = {
-      id: response.id,
-      title: response.title || `Case ${id}`,
-      judges: response.judges || "Not available",
-      date: response.date || "Not available", 
-      summary: response.summary || "Legal case summary not available",
-      pdfUrl: `/supreme_court_pdfs/${id}.pdf`,
-      summaryUrl: `/supreme_court_pdfs/${id}.pdf` // Using PDF as summary for now
-    };
-    console.log("Final case data with PDF URL:", result)
-    return result;
+  const response = await fetchAPI(`/cases/${encodeURIComponent(id)}`)
+  return {
+    id: response.id,
+    title: response.title || `Case ${id}`,
+    judges: response.judges || "Not available",
+    date: response.date || "Not available",
+    summary: response.summary || "Legal case summary not available",
+    pdfUrl: `${PDF_BASE_URL || "/supreme_court_pdfs"}/${encodeURIComponent(id)}.pdf`,
+  }
 }

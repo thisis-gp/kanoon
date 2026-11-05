@@ -1,50 +1,10 @@
 # Core FastAPI & Web
 fastapi
 uvicorn
-starlette
-python-dotenv
-
-# Database & Vector Store
-qdrant-client
-faiss-cpu
-sqlalchemy  
-
-# LangChain & AI
-langchain
-langchain-community
-langchain-core
-langchain-huggingface
-langchain-qdrant
-langchain-text-splitters
-
-# Embeddings & Models (HuggingFace only - no Google dependencies)
-sentence-transformers
-transformers
-torch
-tokenizers
-
-# Groq API
-groq
-
-# File Processing
-beautifulsoup4
-
-# Postgres / ParadeDB (retrieval store — Slice 1)
-psycopg2-binary
-lxml
-pypdf
-unstructured
-python-magic
-
-# Utilities
-numpy
-pandas
-scikit-learn
-scipy
-nltk
-requests
-aiohttp
-tenacity
-backoff
-orjson
 pydantic
+
+# Postgres / ParadeDB (retrieval store)
+psycopg2-binary
+
+# Embeddings + cross-encoder rerank (pulls torch, transformers)
+sentence-transformers

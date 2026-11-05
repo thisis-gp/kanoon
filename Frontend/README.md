@@ -18,10 +18,22 @@ npm run dev
 
 Environment
 
-Copy `env.sample` to `.env` and configure:
+Copy `env.sample` to `.env.local` and configure:
 
-- `VITE_API_URL`: Backend base URL (e.g., http://localhost:8000 or App Runner URL)
-- `VITE_FIREBASE_*`: Optional Firebase keys for chat history
+- `VITE_API_URL`: backend origin without a trailing slash. Empty or unset means same origin.
+- `VITE_FIREBASE_*`: optional. Without them the app still works; login shows a "not available" message and search and case pages stay public.
+- `VITE_REPO_URL`: optional GitHub link for the footer.
+
+Running against a tunnel (ngrok or ssh)
+
+- ngrok: set `VITE_API_URL=https://<name>.ngrok-free.dev`. Every request already sends `ngrok-skip-browser-warning: 1`, so the interstitial page does not break `fetch`.
+- The backend must allow your origin: set `CORS_ALLOWED_ORIGINS=http://localhost:5173` (dev) or your Vercel domain on the backend and restart it.
+- ssh: `ssh -L 8080:127.0.0.1:8080 <host>`, then `VITE_API_URL=http://127.0.0.1:8080`.
+- PDFs load from the page origin (`/supreme_court_pdfs/{id}.pdf`), not from the API tunnel, because an iframe cannot send the skip header.
+
+Error handling
+
+- 429: shows the wait time from `Retry-After`. 503: "answer service is busy or unavailable", case search still works. Network failure and abstention ("Not available in the sources.") have their own messages.
 
 Build & Preview
 

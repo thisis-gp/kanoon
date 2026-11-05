@@ -1,5 +1,6 @@
 import { Skeleton } from "./ui/skeleton"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
+import { displayTitle } from "../lib/utils"
 import { Badge } from "./ui/badge"
 import { CalendarIcon, GavelIcon } from "lucide-react"
 
@@ -28,7 +29,7 @@ export function CaseSummary({ caseData, isLoading }) {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold">{caseData.title}</h1>
+      <h2 className="text-2xl font-bold">{displayTitle(caseData.title, caseData.id)}</h2>
 
       <div className="flex flex-wrap gap-4">
         {caseData.date && (

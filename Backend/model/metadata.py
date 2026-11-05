@@ -9,16 +9,18 @@ Table: case_meta(case_id PK, title, judges, date, summary)
 
 CLI:
   python -m model.metadata init
-  python -m model.metadata backfill <cleaned_texts_dir>
+  python -m model.metadata backfill <cleaned_texts_dir> [--force] [--llm | --no-llm]
   python -m model.metadata get <case_id>
 """
 import os
 import re
 import sys
 import json
+from contextlib import closing
 
 from model.retrieval import RetrievalEngine
 from model import llm_gateway
+from model import metadata_regex
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS case_meta (
@@ -76,53 +78,23 @@ def extract(text):
         return {k: "Not available" for k in ("title", "judges", "date", "summary")}
 
 
-_VS = re.compile(r"^\s*(?:VERSUS|V\s*/\s*S|Vs\.?)\s*$", re.I)
-_MONTHS = ("January|February|March|April|May|June|July|August|September|October|"
-           "November|December")
-
 def extract_regex(text):
-    """LLM-free metadata extraction from an Indian SC judgment (heuristic)."""
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    top = lines[:60]
-    # title: petitioner line ... VERSUS ... respondent line
-    title = "Not available"
-    for i, l in enumerate(top):
-        if _VS.match(l):
-            pet = top[i - 1] if i > 0 else ""
-            resp = top[i + 1] if i + 1 < len(top) else ""
-            pet = re.sub(r"\b(APPELLANT|PETITIONER)\S*\b.*", "", pet, flags=re.I).strip(" .-")
-            resp = re.sub(r"\b(RESPONDENT|ORS?|ANR|ETC)\b.*", "", resp, flags=re.I).strip(" .-&,")
-            if pet and resp:
-                title = f"{pet.title()} vs {resp.title()}"
-            break
-    # judges: signature lines like "ABHAY S. OKA, J."
-    judges = []
-    for l in lines[:60] + lines[-60:]:
-        m = re.match(r"^([A-Z][A-Za-z.\s]{2,40}?),?\s+J\.?$", l)
-        if m and "SUPREME" not in m.group(1).upper():
-            judges.append(re.sub(r"\s+", " ", m.group(1)).strip().title())
-    judges = ", ".join(dict.fromkeys(judges)) or "Not available"
-    # date: near the end
-    tail = text[-1800:]
-    dm = (re.search(rf"(\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{_MONTHS})[,]?\s+\d{{4}})", tail, re.I)
-          or re.search(r"\b(\d{2}[-/]\d{2}[-/]\d{4})\b", tail))
-    date = re.sub(r"\s+", " ", dm.group(1)) if dm else "Not available"
-    # summary: first numbered paragraph
-    sm = re.search(r"(?:^|\n)\s*1\.\s+(.{60,700}?)(?:\n\s*2\.|\Z)", text, re.S)
-    summary = re.sub(r"\s+", " ", sm.group(1)).strip()[:400] if sm else "Not available"
-    out = {"title": title[:200], "judges": judges, "date": date, "summary": summary}
-    # strip U+FFFD encoding artifacts and tidy
-    return {k: re.sub(r"\s+", " ", v.replace("�", "").replace("( vs", "vs")).strip(" -,")
-            or "Not available" for k, v in out.items()}
+    """LLM-free first pass (see model/metadata_regex.py)."""
+    return metadata_regex.extract_regex(text)
 
 
 def init_db():
-    with _eng._conn() as c, c.cursor() as cur:
+    with closing(_eng._conn()) as c, c, c.cursor() as cur:
         cur.execute(SCHEMA)
     print("[init] case_meta ready")
 
 
-def backfill(cleaned_dir, force=False):
+def backfill(cleaned_dir, force=False, llm=None):
+    """Regex first (free, offline); the LLM is an optional second pass.
+    llm=None  -> use the LLM only for fields the regex left as "Not available", and only if a
+                 provider key is configured.
+    llm=True  -> ask the LLM for every case; its answers replace the regex ones.
+    llm=False -> regex only."""
     import glob
     files = sorted(glob.glob(os.path.join(cleaned_dir, "*.txt")),
                    key=lambda p: os.path.basename(p))
@@ -134,16 +106,17 @@ def backfill(cleaned_dir, force=False):
         cur.execute("SELECT case_id FROM case_meta WHERE title <> 'Not available';")
         done = {r[0] for r in cur.fetchall()}
     todo = [f for f in files if os.path.splitext(os.path.basename(f))[0] not in done]
-    print(f"[backfill] {len(done)} done, {len(todo)} to extract")
+    use_llm = llm if llm is not None else bool(llm_gateway.configured_providers())
+    print(f"[backfill] {len(done)} done, {len(todo)} to extract, llm={'on' if use_llm else 'off'}")
     for n, f in enumerate(todo, 1):
         cid = os.path.splitext(os.path.basename(f))[0]
         txt = open(f, encoding="utf-8", errors="ignore").read()
-        m = extract(txt)                # LLM — accurate title/judges/date/summary
-        if any(m[k] == "Not available" for k in m):   # fill misses from regex
-            rx = extract_regex(txt)
+        m = extract_regex(txt)
+        if use_llm and (llm or any(m[k] == "Not available" for k in m)):
+            ai = extract(txt)
             for k in m:
-                if m[k] == "Not available":
-                    m[k] = rx[k]
+                if ai[k] != "Not available" and (llm or m[k] == "Not available"):
+                    m[k] = ai[k]
         cur.execute(
             "INSERT INTO case_meta (case_id, title, judges, date, summary) "
             "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (case_id) DO UPDATE SET "
@@ -151,25 +124,31 @@ def backfill(cleaned_dir, force=False):
             "summary=EXCLUDED.summary",
             (cid, m["title"], m["judges"], m["date"], m["summary"]))
         c.commit()
-        if n % 10 == 0:
+        if n % 50 == 0:
             print(f"  {n}/{len(todo)} (last {cid}: {m['title'][:50]})", flush=True)
     c.close()
-    print(f"[backfill] complete")
+    print("[backfill] complete")
 
 
-def get(case_id):
-    with _eng._conn() as c, c.cursor() as cur:
+def find(case_id):
+    """Metadata dict for a case, or None if the case is not in case_meta."""
+    with closing(_eng._conn()) as c, c, c.cursor() as cur:
         cur.execute("SELECT case_id,title,judges,date,summary FROM case_meta WHERE case_id=%s",
                     (case_id,))
         r = cur.fetchone()
     if not r:
-        return {"id": case_id, "title": f"Case {case_id}", "judges": "Not available",
-                "date": "Not available", "summary": "Not available"}
+        return None
     return {"id": r[0], "title": r[1], "judges": r[2], "date": r[3], "summary": r[4]}
 
 
+def get(case_id):
+    """Like find(), but returns a placeholder card for unknown ids (used by search results)."""
+    return find(case_id) or {"id": case_id, "title": f"Case {case_id}", "judges": "Not available",
+                             "date": "Not available", "summary": "Not available"}
+
+
 def list_cases(limit=20, offset=0):
-    with _eng._conn() as c, c.cursor() as cur:
+    with closing(_eng._conn()) as c, c, c.cursor() as cur:
         cur.execute("SELECT case_id,title,judges,date,summary FROM case_meta "
                     "ORDER BY case_id LIMIT %s OFFSET %s", (limit, offset))
         rows = cur.fetchall()
@@ -183,7 +162,9 @@ def list_cases(limit=20, offset=0):
 def _cli():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "init":     init_db()
-    elif cmd == "backfill": backfill(sys.argv[2], force="--force" in sys.argv)
+    elif cmd == "backfill":
+        llm = True if "--llm" in sys.argv else (False if "--no-llm" in sys.argv else None)
+        backfill(sys.argv[2], force="--force" in sys.argv, llm=llm)
     elif cmd == "get":    print(get(sys.argv[2]))
     else:                 print(__doc__)
 

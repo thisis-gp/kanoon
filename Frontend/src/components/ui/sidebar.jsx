@@ -121,9 +121,11 @@ const SidebarItem = ({ className, icon: Icon, title, active, ...props }) => {
   const { state } = useSidebar()
 
   return (
-    <div
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex cursor-pointer items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        "flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400",
         active
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -131,9 +133,9 @@ const SidebarItem = ({ className, icon: Icon, title, active, ...props }) => {
       )}
       {...props}
     >
-      {Icon && <Icon className="mr-2 h-5 w-5" />}
+      {Icon && <Icon aria-hidden="true" className="mr-2 h-5 w-5" />}
       {(state === "expanded" || !Icon) && <span>{title}</span>}
-    </div>
+    </button>
   )
 }
 
@@ -144,13 +146,15 @@ const SidebarGroup = ({ className, title, children, ...props }) => {
   return (
     <div className={cn("mb-4", className)} {...props}>
       {title && state === "expanded" && (
-        <div
-          className="flex cursor-pointer items-center justify-between py-2 text-sm font-medium text-muted-foreground"
+        <button
+          type="button"
+          aria-expanded={open}
+          className="flex w-full cursor-pointer items-center justify-between py-2 text-sm font-medium text-muted-foreground"
           onClick={() => setOpen(!open)}
         >
           {title}
-          <ChevronDown className={cn("h-4 w-4 transition-transform", open ? "rotate-0" : "-rotate-90")} />
-        </div>
+          <ChevronDown aria-hidden="true" className={cn("h-4 w-4 transition-transform", open ? "rotate-0" : "-rotate-90")} />
+        </button>
       )}
       {(open || state === "collapsed") && <div className="space-y-1 pt-1">{children}</div>}
     </div>

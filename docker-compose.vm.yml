@@ -1,0 +1,86 @@
+# VM deployment: everything bound to 127.0.0.1, own project name. Reach via SSH tunnel.
+# Whole stack hard-capped under 2 GB RAM: db 700m + backend 1200m = 1900m (swap disabled via memswap_limit).
+# Hardening: all Linux capabilities dropped (the db gets back only the five its entrypoint needs),
+# no-new-privileges, a PID limit, and a read-only backend root filesystem (writable: /tmp tmpfs and the
+# /hf model cache volume).
+# Database password: set DB_PASSWORD in the shell or in ./.env (compose reads it) for a real deployment.
+# The default "ailse" is for development only. A password change does not alter an EXISTING data
+# directory: also run  ALTER USER ailse PASSWORD '...';  inside the db container.
+# Connections: the backend pool is DB_POOL_MAX (default 10) per process and runs one worker, so
+# max_connections=30 leaves room for psql, backfill jobs and the health check.
+name: kanoon
+services:
+  db:
+    image: paradedb/paradedb:latest
+    command: >
+      postgres -c shared_buffers=128MB -c work_mem=4MB -c maintenance_work_mem=128MB
+      -c effective_cache_size=256MB -c max_connections=30
+      -c max_parallel_maintenance_workers=0 -c max_parallel_workers_per_gather=0
+    mem_limit: ${DB_MEM:-700m}
+    memswap_limit: ${DB_MEM:-700m}
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # what the postgres entrypoint needs
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 200
+    environment:
+      POSTGRES_USER: ailse
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ailse}
+      POSTGRES_DB: ailse
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - /var/oled/kanoon/pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ailse -d ailse"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.vm
+    mem_limit: ${BACKEND_MEM:-1200m}
+    memswap_limit: ${BACKEND_MEM:-1200m}
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 300
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      - "127.0.0.1:8080:8000"
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://ailse:${DB_PASSWORD:-ailse}@db:5432/ailse
+      HF_HOME: /hf
+      HF_HUB_OFFLINE: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      TOKENIZERS_PARALLELISM: "false"
+      LLM_MIN_GAP: "${LLM_MIN_GAP:-2.5}"
+      RATE_OTHER_PER_MIN: "${RATE_OTHER_PER_MIN:-60}"
+      RATE_LLM_PER_MIN: "${RATE_LLM_PER_MIN:-10}"
+      RATE_SEARCH_PER_MIN: "${RATE_SEARCH_PER_MIN:-10}"
+      RATE_STATIC_PER_MIN: "${RATE_STATIC_PER_MIN:-300}"
+      LLM_DAILY_CAP: "${LLM_DAILY_CAP:-300}"
+      LLM_DAILY_PER_IP: "${LLM_DAILY_PER_IP:-20}"
+      LLM_DAILY_RESERVE: "${LLM_DAILY_RESERVE:-30}"
+      LLM_DEADLINE: "${LLM_DEADLINE:-30}"
+      LLM_CONCURRENCY: "${LLM_CONCURRENCY:-3}"
+      INFER_QUEUE_TIMEOUT: "${INFER_QUEUE_TIMEOUT:-5}"
+      DB_POOL_MAX: "${DB_POOL_MAX:-10}"
+      RETENTION_DAYS: "${RETENTION_DAYS:-30}"
+      HEALTH_TOKEN: "${HEALTH_TOKEN:-}"
+      IP_HASH_SALT: "${IP_HASH_SALT:-}"
+      PYTHONDONTWRITEBYTECODE: "1"
+      HOME: /tmp                  # read-only root: any stray cache write lands in the tmpfs
+    env_file:
+      - path: ./Backend/.env
+        required: false
+    volumes:
+      - /var/oled/kanoon/hf:/hf
+      - ./Backend/supreme_court_pdfs:/app/supreme_court_pdfs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped

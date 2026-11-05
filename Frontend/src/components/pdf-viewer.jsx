@@ -27,21 +27,17 @@ export function PDFViewerComponent({ pdfUrl }) {
     // If pdfUrl starts with http, use it directly, otherwise prepend the base URL
     const url = pdfUrl.startsWith("http") ? pdfUrl : `${window.location.origin}${pdfUrl}`
 
-    console.log("PDF URL:", pdfUrl)
-    console.log("Full URL:", url)
     setFullUrl(url)
 
     // Check if the PDF exists
     fetch(url, { method: "HEAD" })
       .then((response) => {
-        console.log("PDF fetch response:", response.status, response.statusText)
         if (!response.ok) {
           throw new Error(`PDF not found: ${response.status}`)
         }
         setLoading(false)
       })
       .catch((err) => {
-        console.error("Error loading PDF:", err)
         setError(`Failed to load PDF: ${err.message}`)
         setLoading(false)
       })
@@ -63,11 +59,11 @@ export function PDFViewerComponent({ pdfUrl }) {
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            <div role="status" aria-label="Loading PDF" className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <p className="text-destructive mb-4">{error}</p>
+            <p role="alert" className="text-red-300 mb-4">{error}</p>
             <Button onClick={retryLoading} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry
@@ -84,7 +80,8 @@ export function PDFViewerComponent({ pdfUrl }) {
               height: `calc(100% / ${scale})`,
               width: `calc(100% / ${scale})`,
             }}
-            title="PDF Viewer"
+            title="Judgment PDF"
+            tabIndex={0}
             onLoad={() => setLoading(false)}
             onError={() => {
               setError("Failed to load PDF document")

@@ -12,7 +12,6 @@ export async function saveSearchHistory(userId, searchTerm, resultCount) {
       timestamp: serverTimestamp()
     });
     
-    console.log("Search history saved successfully");
   } catch (error) {
     console.error("Error saving search history:", error);
     throw error;

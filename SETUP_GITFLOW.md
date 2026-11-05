@@ -1,5 +1,7 @@
 # GitFlow Setup Guide
 
+> **Branching advice only.** The branch model below (`master` for development, `prod` for production, PRs from `master` to `prod`) still describes how the repository is organised, and `prod` is the default branch. The deployment target named in the diagram and text ("AWS App Runner") is the **earlier design**: the current deployment is Docker Compose on a VM, see [docs/DEPLOY-VM.md](docs/DEPLOY-VM.md). `.github/workflows/deploy-prod.yml` (App Runner) is outdated; `ci.yml` and `deploy-frontend.yml` (Vercel) still apply.
+
 ## **Branch Structure**
 
 ```
@@ -7,7 +9,7 @@ master (development)
   ↓ (PR + Review)
 prod (production)
   ↓ (auto-deploy)
-AWS App Runner
+Deployment (legacy: AWS App Runner; now: Docker Compose on a VM)
 ```
 
 ## **Workflow Process**
@@ -39,7 +41,7 @@ git push origin master
 ### **4. Merge to Production**
 ```bash
 # After PR approval, merge to prod
-# This triggers automatic deployment to AWS
+# This triggers the (legacy) automatic deployment workflow
 ```
 
 ## **GitHub Settings to Configure**

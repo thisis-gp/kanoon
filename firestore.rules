@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// Owner-only access. Written from what Frontend/src actually does:
+//   users/{uid}                 setDoc at signup (auth-context.jsx)
+//   users/{uid}/searches/{id}   addDoc, getDocs, deleteDoc (utils/firebase-helpers.js)
+//   chatHistory/{id}            addDoc, query where userId == uid (utils/firebase-helpers.js)
+// Everything else is denied. Deploy with:  firebase deploy --only firestore:rules
+// (see docs/FIREBASE-SECURITY.md). Nothing here deploys itself.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Profile document, written once at signup.
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name', 'email', 'createdAt']);
+
+      // Search history: only that user, only the fields the app writes.
+      match /searches/{searchId} {
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['query', 'resultCount', 'timestamp'])
+          && request.resource.data.query is string
+          && request.resource.data.query.size() <= 1000;
+        allow update: if false;
+      }
+    }
+
+    // Per-case chat history, stored at the top level with the owner in userId.
+    match /chatHistory/{messageId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['userId', 'caseId', 'message', 'response', 'timestamp']);
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      // An update may not hand the document to somebody else.
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# backend/Dockerfile
+# Backend/Dockerfile
 FROM python:3.10-slim
 
 # Clear build cache and start fresh
@@ -23,6 +23,7 @@ COPY requirements.txt .
 
 # Install Python dependencies with no cache
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
     pip cache purge
 
@@ -36,7 +37,8 @@ RUN find . -name "*.pyc" -delete && \
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
+    && mkdir /hf && chown -R app:app /app /hf
+ENV HF_HOME=/hf
 USER app
 
 # Expose port
@@ -47,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Run the application
-CMD ["python", "model/main.py"]
+CMD ["python", "-m", "uvicorn", "model.api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -10,7 +10,7 @@ import { useState } from "react"
 import { Logo } from "./logo"
 
 export function Navbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, loginAvailable } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -47,7 +47,7 @@ export function Navbar() {
   }
 
   return (
-    <nav className="border-b bg-card">
+    <nav aria-label="Main" className="border-b bg-card">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center">
           <Link to="/" className="flex items-center">
@@ -63,6 +63,9 @@ export function Navbar() {
 
           <Link to="/">
             <Button variant="ghost">Search</Button>
+          </Link>
+          <Link to="/about">
+            <Button variant="ghost">About</Button>
           </Link>
 
           {user ? (
@@ -86,7 +89,7 @@ export function Navbar() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              {!isAuthPage && (
+              {!isAuthPage && loginAvailable && (
                 <>
                   <Link to="/login">
                     <Button variant="outline">Login</Button>
@@ -110,6 +113,7 @@ export function Navbar() {
             size="icon"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
+            aria-expanded={mobileMenuOpen}
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -121,6 +125,9 @@ export function Navbar() {
         <div className="border-t bg-card px-4 py-2 md:hidden">
           <Link to="/" className="block w-full">
             <Button variant="ghost" className="w-full justify-start">Search</Button>
+          </Link>
+          <Link to="/about" className="block w-full">
+            <Button variant="ghost" className="w-full justify-start">About</Button>
           </Link>
           {user ? (
             <div className="flex flex-col gap-2">
@@ -146,7 +153,7 @@ export function Navbar() {
             </div>
           ) : (
             <div className="flex flex-col gap-2 py-2">
-              {!isAuthPage && (
+              {!isAuthPage && loginAvailable && (
                 <>
                   <Link to="/login" className="w-full">
                     <Button variant="outline" className="w-full">

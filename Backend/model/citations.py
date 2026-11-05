@@ -16,6 +16,7 @@ Tables:
 CLI:
   python citations.py init
   python citations.py build <cleaned_texts_dir>
+  python citations_mining.py <cleaned_texts_dir>   # fuller: fills case_refs so cited-by works
   python citations.py self-refs <pdf_dir>        # markitdown self-id mine (slow)
   python citations.py cites <case_id>
   python citations.py cited-by <case_id>
@@ -23,6 +24,7 @@ CLI:
 import os
 import re
 import sys
+from contextlib import closing
 
 from model.retrieval import RetrievalEngine  # reuse DSN + _conn
 
@@ -35,37 +37,57 @@ CREATE TABLE IF NOT EXISTS citations (
 );
 CREATE INDEX IF NOT EXISTS citations_from_idx ON citations (from_case);
 CREATE INDEX IF NOT EXISTS citations_ref_idx  ON citations (cited_ref);
+-- One case can have several identifiers (neutral, SCC, AIR, title key), hence the composite key.
 CREATE TABLE IF NOT EXISTS case_refs (
-    case_id      TEXT PRIMARY KEY,
-    neutral_cite TEXT
+    case_id      TEXT NOT NULL,
+    neutral_cite TEXT NOT NULL,
+    PRIMARY KEY (case_id, neutral_cite)
 );
 CREATE INDEX IF NOT EXISTS case_refs_neutral_idx ON case_refs (neutral_cite);
 """
 
-# Indian Supreme Court citation formats
+# Indian Supreme Court citation formats. Each entry: (type, regex, canonical formatter).
+# Variants that name the same report (e.g. "[2020] 3 SCR 456" and "(2020) 3 SCR 456") map to ONE
+# canonical string so a citation written differently in two judgments still matches.
+_Y = r"((?:19|20)\d{2})"
+_SUB = r"(?:\(\s*(Cri|L&S|Civ|Tax|Supp|Lab)\s*\)\s*)?"
 PATTERNS = [
-    ("neutral", re.compile(r"\b(?:19|20)\d{2}\s+INSC\s+\d+\b", re.I)),
-    ("scc",     re.compile(r"\(\s*(?:19|20)\d{2}\s*\)\s*\d+\s+SCC\s+\d+", re.I)),
-    ("air",     re.compile(r"\bAIR\s+(?:19|20)\d{2}\s+SC\s+\d+", re.I)),
-    ("scale",   re.compile(r"\(\s*(?:19|20)\d{2}\s*\)\s*\d+\s+SCALE\s+\d+", re.I)),
-    ("scr",     re.compile(r"\b(?:19|20)\d{2}\s+\d+\s+SCR\s+\d+", re.I)),
+    ("neutral", re.compile(rf"\b{_Y}\s+INSC\s+(\d+)\b", re.I),
+        lambda m: f"{m[1]} INSC {m[2]}"),
+    ("scc_online", re.compile(rf"\b{_Y}\s+SCC\s*On\s*-?\s*Line\s+SC\s+(\d+)", re.I),
+        lambda m: f"{m[1]} SCC ONLINE SC {m[2]}"),
+    ("scc", re.compile(rf"\(\s*{_Y}\s*\)\s*(\d+)\s+SCC\s+{_SUB}(\d+)", re.I),
+        lambda m: f"({m[1]}) {m[2]} SCC " + (f"({m[3].upper()}) " if m[3] else "") + m[4]),
+    ("air",     re.compile(rf"\bA\.?\s?I\.?\s?R\.?\s+{_Y}\s+(?:SC|S\.\s?C\.)\s+(\d+)", re.I),
+        lambda m: f"AIR {m[1]} SC {m[2]}"),
+    ("scale",   re.compile(rf"\(\s*{_Y}\s*\)\s*(\d+)\s+SCALE\s+(\d+)", re.I),
+        lambda m: f"({m[1]}) {m[2]} SCALE {m[3]}"),
+    ("scr",     re.compile(rf"[\[(]\s*{_Y}\s*[\])]\s*(\d+)\s+SCR\s+(\d+)", re.I),
+        lambda m: f"[{m[1]}] {m[2]} SCR {m[3]}"),
+    ("scr",     re.compile(rf"\b{_Y}\s*\(\s*(\d+)\s*\)\s*SCR\s+(\d+)", re.I),
+        lambda m: f"[{m[1]}] {m[2]} SCR {m[3]}"),
+    ("scr",     re.compile(rf"\b{_Y}\s+(\d+)\s+SCR\s+(\d+)", re.I),
+        lambda m: f"[{m[1]}] {m[2]} SCR {m[3]}"),
 ]
+
 
 def _norm(s):
     return re.sub(r"\s+", " ", s).strip().upper()
 
+
 def extract_citations(text):
-    """Return list of (ref_type, normalized_ref), de-duplicated."""
+    """Return list of (ref_type, canonical_ref), de-duplicated."""
     found = {}
-    for rtype, rx in PATTERNS:
+    for rtype, rx, fmt in PATTERNS:
         for m in rx.finditer(text):
-            found[_norm(m.group(0))] = rtype
+            found.setdefault(fmt(m), rtype)
     return [(t, r) for r, t in found.items()]
+
 
 def extract_self_ref(text):
     """Best-effort: the case's OWN neutral citation (usually top of the judgment)."""
     m = PATTERNS[0][1].search(text[:1500])
-    return _norm(m.group(0)) if m else None
+    return PATTERNS[0][2](m) if m else None
 
 
 class CitationGraph:
@@ -73,7 +95,7 @@ class CitationGraph:
         self.eng = RetrievalEngine()
 
     def init_db(self):
-        with self.eng._conn() as c, c.cursor() as cur:
+        with closing(self.eng._conn()) as c, c, c.cursor() as cur:
             cur.execute(SCHEMA)
         print("[init] citation tables ready")
 
@@ -96,8 +118,7 @@ class CitationGraph:
             self_ref = extract_self_ref(txt)
             if self_ref:
                 cur.execute("INSERT INTO case_refs (case_id, neutral_cite) VALUES (%s,%s) "
-                            "ON CONFLICT (case_id) DO UPDATE SET neutral_cite=EXCLUDED.neutral_cite",
-                            (cid, self_ref))
+                            "ON CONFLICT DO NOTHING", (cid, self_ref))
             c.commit()
         c.close()
         print(f"[build] {len(files)} cases -> {total} citation edges")
@@ -117,20 +138,19 @@ class CitationGraph:
             ref = extract_self_ref(out)
             if ref:
                 cur.execute("INSERT INTO case_refs (case_id, neutral_cite) VALUES (%s,%s) "
-                            "ON CONFLICT (case_id) DO UPDATE SET neutral_cite=EXCLUDED.neutral_cite",
-                            (cid, ref)); c.commit(); n += 1
+                            "ON CONFLICT DO NOTHING", (cid, ref)); c.commit(); n += 1
         c.close()
         print(f"[self-refs] mined neutral cite for {n}/{len(files)} cases")
 
     def cites(self, case_id):
-        with self.eng._conn() as c, c.cursor() as cur:
+        with closing(self.eng._conn()) as c, c, c.cursor() as cur:
             cur.execute("SELECT cited_ref, ref_type FROM citations WHERE from_case=%s "
                         "ORDER BY ref_type", (case_id,))
             return [{"ref": r, "type": t} for r, t in cur.fetchall()]
 
     def cited_by(self, case_id):
         """Intra-corpus: other cases whose text cites THIS case's neutral cite."""
-        with self.eng._conn() as c, c.cursor() as cur:
+        with closing(self.eng._conn()) as c, c, c.cursor() as cur:
             cur.execute("""
                 SELECT DISTINCT ct.from_case
                 FROM citations ct

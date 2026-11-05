@@ -35,7 +35,7 @@ export function ChatInterface({ caseId, onSendMessage }) {
           setMessages(formattedMessages)
         }
       } catch (err) {
-        console.error("Failed to load chat history:", err)
+        console.warn("Could not load chat history", err?.code || "")
       }
     }
 
@@ -84,18 +84,13 @@ export function ChatInterface({ caseId, onSendMessage }) {
 
       setMessages((prev) => [...prev, assistantMessage])
     } catch (err) {
-      console.error("Error sending message:", err)
-      setError("Failed to get a response. Please try again.")
+      setError(err.message || "Failed to get a response. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleQuestionClick = (question) => {
-    setNewMessage(question)
-  }
-
-  const handleTextToSpeech = async (text, messageId) => {
+  const handleTextToSpeech = async (text) => {
     // If already playing, stop it
     if (isPlaying && currentAudio) {
       currentAudio.pause()
@@ -140,14 +135,19 @@ export function ChatInterface({ caseId, onSendMessage }) {
       // Start speaking
       window.speechSynthesis.speak(speech)
     } catch (error) {
-      console.error("Text-to-speech error:", error)
+      console.warn("Text-to-speech unavailable", error?.name || "")
     }
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4" role="log" aria-live="polite" aria-label="Chat messages">
         <div className="space-y-4">
+          {messages.length === 0 && !isLoading && (
+            <p className="text-sm text-muted-foreground">
+              Ask a question about this judgment. Answers use only text from this case and may be wrong, so check the PDF.
+            </p>
+          )}
           {messages.map((message) => (
             <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
@@ -155,13 +155,13 @@ export function ChatInterface({ caseId, onSendMessage }) {
                   message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                 }`}
               >
-                <p className="text-base">{message.content}</p>
+                <p className="whitespace-pre-wrap text-base">{message.content}</p>
                 {message.role === "assistant" && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="mt-2 h-6 w-6 p-0"
-                    onClick={() => handleTextToSpeech(message.content, message.id)}
+                    onClick={() => handleTextToSpeech(message.content)}
                   >
                     {isPlaying ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                     <span className="sr-only">{isPlaying ? "Stop text-to-speech" : "Play text-to-speech"}</span>
@@ -185,7 +185,7 @@ export function ChatInterface({ caseId, onSendMessage }) {
 
           {error && (
             <div className="flex justify-center">
-              <div className="rounded-lg bg-destructive/10 text-destructive px-4 py-2">{error}</div>
+              <div role="alert" className="rounded-lg bg-red-500/10 px-4 py-2 text-red-300">{error}</div>
             </div>
           )}
 
@@ -194,32 +194,17 @@ export function ChatInterface({ caseId, onSendMessage }) {
       </div>
 
       <div className="border-t p-4">
-        {/* <div className="mb-4">
-          <h3 className="text-sm font-medium mb-2">Common Questions</h3>
-          <div className="flex flex-wrap gap-2">
-            {COMMON_QUESTIONS.map((question, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={() => handleQuestionClick(question)}
-              >
-                {question}
-              </Button>
-            ))}
-          </div>
-        </div> */}
-
         <form onSubmit={handleSendMessage} className="flex gap-2 items-center h-14">
+          <label htmlFor="case-chat-input" className="sr-only">Ask about this case</label>
           <Input
+            id="case-chat-input"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Ask about this case..."
             className="flex-1 text-base placeholder:text-base h-full"
             disabled={isLoading}
           />
-          <Button type="submit" size="icon" disabled={isLoading} className="h-full w-14">
+          <Button type="submit" size="icon" disabled={isLoading || !newMessage.trim()} className="h-full w-14">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-5 w-5" />}
             <span className="sr-only">Send</span>
           </Button>

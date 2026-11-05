@@ -1,0 +1,12 @@
+.git
+**/node_modules
+**/__pycache__
+Frontend/dist
+Backend/.env
+Backend/supreme_court_pdfs
+Backend/supreme_court_texts
+Backend/faiss_index
+Backend/clean
+Backend/test/_tmp_corpus
+Frontend/public/supreme_court_pdfs
+Backend/test
