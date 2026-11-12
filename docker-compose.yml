@@ -18,7 +18,6 @@ services:
       - ./Backend/.env
     volumes:
       - ./Backend/logs:/app/logs
-      - ./Backend/cases_metadata.db:/app/cases_metadata.db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -29,23 +28,6 @@ services:
     command: python -m uvicorn model.api:app --host 0.0.0.0 --port 8000
     depends_on:
       - db
-    networks:
-      - app-network
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - CHOKIDAR_USEPOLLING=true
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
     networks:
       - app-network
 

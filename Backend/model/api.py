@@ -256,11 +256,12 @@ async def security_headers(request: Request, call_next):
 
 
 # CORS is added LAST so it is the outermost layer: 429s and errors still carry CORS headers.
-# Allowed browser origins: ngrok front door + local fallback, plus extras from CORS_ALLOWED_ORIGINS
-# (comma-separated, exact origins, no wildcard), e.g. the Vercel domain.
+# Allowed browser origins: local dev origins (non-production only) plus CORS_ALLOWED_ORIGINS
+# (comma-separated, exact origins, no wildcard), e.g. the Vercel or tunnel domain. The VM image serves
+# the frontend from the same origin, so it needs none.
 _PRODUCTION = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
 _DEV_ORIGINS = ["http://127.0.0.1:8080", "http://localhost:3000", "http://localhost:5173"]
-_origins = ["https://tarot-remindful-candy.ngrok-free.dev"] + ([] if _PRODUCTION else _DEV_ORIGINS)
+_origins = [] if _PRODUCTION else list(_DEV_ORIGINS)
 _origins += [o.strip().rstrip("/") for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
              if o.strip() and o.strip() != "*"]
 app.add_middleware(

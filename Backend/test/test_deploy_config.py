@@ -108,4 +108,3 @@ def test_firestore_rules_are_owner_only():
     assert "resource.data.userId == request.auth.uid" in rules
     assert re.search(r"match /\{document=\*\*\} \{\s*allow read, write: if false;", rules)
     assert "if true" not in rules
-    assert (ROOT / "docs" / "FIREBASE-SECURITY.md").exists() and (ROOT / "docs" / "SECURITY.md").exists()

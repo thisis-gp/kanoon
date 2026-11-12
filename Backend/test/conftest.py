@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+os.environ.setdefault("CORS_ALLOWED_ORIGINS", "https://tarot-remindful-candy.ngrok-free.dev")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 INTEGRATION_TESTS = {"test_search_end_to_end", "test_graph_queries", "test_gateway",

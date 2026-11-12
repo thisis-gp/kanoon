@@ -36,7 +36,6 @@ flowchart LR
     STORE --> OUT
 ```
 
-Details, data model, ingestion and failure modes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tech stack
 
@@ -65,14 +64,14 @@ The cross-encoder accounts for about 95% of cold time: median stage times were e
 
 **Answer cache** (checked with a stand-in LLM that sleeps 1 s and counts calls, not a real provider): a repeated question served from memory took 0.0 ms and made 0 search and 0 LLM calls; after clearing memory it was served from the Postgres `answer_cache` in 9.4 ms with 0 calls. Real `/ask` latency with a live provider has not been measured.
 
-**Known-item retrieval PROXY** (50 random cases, seed 7; a hit means the source case is in the top k). This is a proxy, not a benchmark. The query text comes from a chunk that is in the index, so the numbers are optimistic. See [docs/EVALUATION.md](docs/EVALUATION.md).
+**Known-item retrieval PROXY** (100 passage and 100 title queries, with 95% intervals in `Backend/eval/results/RESULTS.md`; a hit means the source case is in the top k). This is a proxy, not a benchmark. The query text comes from a chunk that is in the index, so the numbers are optimistic.  Method and numbers: [Backend/eval/results/RESULTS.md](Backend/eval/results/RESULTS.md).
 
-| Method | Passage queries (n=50), top-1 / top-5 | Title queries "X vs Y" (n=45), top-1 / top-5 |
+| Method | Passage queries (n=100), top-1 / top-5 | Title queries "X vs Y" (n=100), top-1 / top-5 |
 |---|---|---|
-| dense only | 40% / 54% | 17.8% / 33.3% |
-| BM25 only | 80% / 86% | 62.2% / 73.3% |
-| hybrid RRF | 56% / 88% | 28.9% / 68.9% |
-| hybrid + rerank | 94% / 96% | 75.6% / 80.0% |
+| dense only | 37% / 52% | 24% / 46% |
+| BM25 only | 88% / 91% | 84% / 95% |
+| hybrid RRF | 50% / 85% | 41% / 88% |
+| hybrid + rerank | 93% / 94% | 96% / 97% |
 
 **Memory** (docker stats, backend / database):
 
@@ -87,7 +86,7 @@ Other measured facts: ingesting the corpus took about 1.5 hours on 2 cores (abou
 
 ## Limitations
 
-- **Small proxy evaluation.** The only retrieval measurement is the known-item proxy above (n = 50 and 45, one seed, optimistic). No answer-quality, faithfulness or citation-accuracy evaluation exists.
+- **Small proxy evaluation.** The only retrieval measurement is the known-item proxy above (n = 100 per query type, one seed, optimistic). No answer-quality, faithfulness or citation-accuracy evaluation exists.
 - **No real-user benchmark.** No lawyer or student has judged results, and no external benchmark was run.
 - **Citation graph is regex based.** Citations are found with patterns for Indian citation formats and will miss or misfire. On the reference build the table that resolves "cited by" was empty, so that endpoint returns an empty list.
 - **Abstention is prompt based.** The model is told to answer "Not available in the sources." when the evidence is missing. There is no relevance threshold in code, so it can still answer from weak evidence.
@@ -131,13 +130,23 @@ npm install
 npm run dev
 ```
 
-The cleaned texts and PDFs are large and are not kept in git; see [Backend/README.md](Backend/README.md). Note that `docker compose up -d db` in the root `docker-compose.yml` starts only the database; that file's `frontend` service points at `./frontend` (lowercase), which does not match the `Frontend/` folder on case-sensitive file systems; run the frontend with npm instead.
+The cleaned texts and PDFs are large and are not kept in git; see [Backend/README.md](Backend/README.md). The root `docker-compose.yml` is for local development (backend plus database); run the frontend with npm as above.
+
+## Deploy on a VM (what runs today)
+
+One image serves the API and the built React app from the same origin, so no CORS setup is needed.
+
+```bash
+git clone https://github.com/thisis-gp/kanoon && cd kanoon
+cp Backend/env.sample Backend/.env      # add an LLM key to enable /ask and /chat_query (503 without one)
+sudo docker compose -f docker-compose.vm.yml up -d --build
+curl http://127.0.0.1:8080/health
+```
+
+The compose file binds everything to `127.0.0.1` (API on 8080, database on 5433) and caps memory at 700 MB (database) and 1200 MB (backend). Put a tunnel or a reverse proxy in front of port 8080 to publish it. Set `DB_PASSWORD` in the shell or `./.env` for any real deployment. The database needs the corpus loaded once (`python -m model.retrieval build ...`, see Quick start). If you host the frontend separately (for example on Vercel with the project root set to `Frontend/`), set `VITE_API_URL` at build time and `CORS_ALLOWED_ORIGINS` on the backend.
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, data model, ingestion, failure modes
-- [docs/EVALUATION.md](docs/EVALUATION.md): the proxy method and its limits
-- [docs/DEPLOY-VM.md](docs/DEPLOY-VM.md): the deployment that was actually run (Docker Compose on a VM)
 - [Backend/README.md](Backend/README.md): endpoints and environment variables
 - [Frontend/README.md](Frontend/README.md): frontend setup and variables
 - [DEPLOYMENT.md](DEPLOYMENT.md), [FRONTEND_DEPLOYMENT.md](FRONTEND_DEPLOYMENT.md), [SETUP_GITFLOW.md](SETUP_GITFLOW.md), [FIREBASE_SETUP.md](FIREBASE_SETUP.md): CI/CD and setup notes (parts are marked legacy)

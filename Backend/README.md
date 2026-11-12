@@ -47,7 +47,7 @@ Error behaviour for `/ask` and `/chat_query`: HTTP 429 with a `Retry-After` head
 ### Rate limits and CORS
 
 - Per client IP, in memory, one worker: 60 requests per minute for API calls in general (`RATE_OTHER_PER_MIN`) and 10 per minute for `/ask` and `/chat_query` (`RATE_LLM_PER_MIN`). Over the limit gives HTTP 429 with `Retry-After`. `/health`, `OPTIONS` and static file GETs are not limited. The IP is the last `X-Forwarded-For` entry (the one a proxy such as ngrok appends); earlier entries are client-controlled and ignored.
-- CORS allows only listed origins. The built-in list contains the owner's ngrok origin, `http://127.0.0.1:8080`, `http://localhost:3000` and `http://localhost:5173`. Add more (for example your Vercel domain) with `CORS_ALLOWED_ORIGINS`. A `*` is ignored. Allowed methods are GET, POST and OPTIONS.
+- CORS allows only listed origins. In development the built-in list is `http://127.0.0.1:8080`, `http://localhost:3000` and `http://localhost:5173`; production has none. Add origins (for example a Vercel or tunnel domain) with `CORS_ALLOWED_ORIGINS`. The VM image serves the frontend from the same origin, so it needs none. A `*` is ignored. Allowed methods are GET, POST and OPTIONS.
 
 ## Environment variables
 
