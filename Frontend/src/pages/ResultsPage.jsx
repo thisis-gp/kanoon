@@ -18,26 +18,95 @@ const EXAMPLES = [
 const CASE_RESULT_COUNT = 6
 const SOURCE_EXCERPT_CHARS = 280
 
-// answer text -> [n] chips that link to the cited case
-function renderAnswer(text, sources) {
-  return text.split(/(\[\d+\])/g).map((part, i) => {
+const WORD_JOINER = "\u2060" // keeps a chip on the same line as the word before it
+
+// text with [n] markers -> text + chips that link to the cited case
+function renderCitations(text, sources, keyBase) {
+  const tight = text.replace(/\s+(\[\d+\])/g, "$1").replace(/(\[\d+\])\s+([.,;:])/g, "$1$2")
+  return tight.split(/(\[\d+\])/g).map((part, i) => {
+    const key = `${keyBase}-${i}`
     const m = part.match(/^\[(\d+)\]$/)
-    if (!m) return <span key={i}>{part}</span>
+    if (!m) return part
     const n = Number(m[1])
     const src = sources?.find((s) => s.n === n) ?? sources?.[n - 1]
-    if (!src) return <span key={i}>{part}</span>
+    if (!src) return part
     return (
-      <sup key={i}>
+      <sup key={key}>
+        {WORD_JOINER}
         <Link
           to={`/case/${src.case_id}`}
           aria-label={`Source ${n}: case ${src.case_id}`}
-          className="mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded bg-indigo-500/25 px-1 text-[11px] font-semibold text-indigo-200 hover:bg-indigo-500/45"
+          className="ml-px mr-px inline-flex h-4 min-w-4 items-center justify-center rounded bg-indigo-500/25 px-[3px] align-baseline text-[11px] font-semibold text-indigo-200 hover:bg-indigo-500/45"
         >
           {n}
         </Link>
       </sup>
     )
   })
+}
+
+// inline markdown: **bold** (citations work inside it)
+function renderInline(text, sources, keyBase) {
+  return text.split(/(\*\*.+?\*\*)/g).map((part, i) => {
+    const key = `${keyBase}-${i}`
+    const bold = part.match(/^\*\*(.+)\*\*$/)
+    if (bold) return <strong key={key} className="font-semibold text-foreground">{renderCitations(bold[1], sources, key)}</strong>
+    return <span key={key}>{renderCitations(part, sources, key)}</span>
+  })
+}
+
+const BULLET_RE = /^\s*[*-]\s+(.*)$/
+const NUMBER_RE = /^\s*\d+[.)]\s+(.*)$/
+
+// shortcut: paragraphs, bold, bullet and numbered lists only; no nesting, italics or headings
+function renderAnswer(text, sources) {
+  const blocks = []
+  let para = []
+  let list = null
+  const flushPara = () => {
+    if (para.length) blocks.push({ type: "p", text: para.join(" ") })
+    para = []
+  }
+  const flushList = () => {
+    if (list) blocks.push(list)
+    list = null
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const bullet = line.match(BULLET_RE)
+    const number = bullet ? null : line.match(NUMBER_RE)
+    const item = bullet || number
+    if (item) {
+      flushPara()
+      const type = bullet ? "ul" : "ol"
+      if (list?.type !== type) { flushList(); list = { type, items: [] } }
+      list.items.push(item[1])
+    } else if (!line.trim()) {
+      flushPara(); flushList()
+    } else if (list && /^\s+/.test(line)) {
+      list.items[list.items.length - 1] += " " + line.trim() // wrapped list item
+    } else {
+      flushList()
+      para.push(line.trim())
+    }
+  }
+  flushPara(); flushList()
+
+  return blocks.map((b, i) => {
+    if (b.type === "p") return <p key={i}>{renderInline(b.text, sources, `p${i}`)}</p>
+    const Tag = b.type
+    const marker = b.type === "ul" ? "list-disc" : "list-decimal"
+    return (
+      <Tag key={i} className={`${marker} space-y-1.5 pl-5 marker:text-indigo-300/70`}>
+        {b.items.map((t, j) => <li key={j}>{renderInline(t, sources, `l${i}-${j}`)}</li>)}
+      </Tag>
+    )
+  })
+}
+
+// "Case 109" unless a usable title exists
+function sourceLabel(title, id) {
+  const t = (title || "").trim()
+  return !t || t === "Not available" || t.startsWith("...") || t.startsWith("…") ? `Case ${id}` : displayTitle(t, id)
 }
 
 function ErrorNote({ error, onRetry, subject }) {
@@ -138,6 +207,7 @@ export default function ResultsPage() {
   const citedSources = answer && !abstained
     ? (answer.sources || []).filter((s) => !answer.cited?.length || answer.cited.includes(s.n))
     : []
+  const titles = Object.fromEntries((cases || []).map((c) => [String(c.id), c.title]))
   const searched = Boolean(params.get("q"))
 
   return (
@@ -184,7 +254,6 @@ export default function ResultsPage() {
           <section aria-labelledby="answer-h" className="mt-8 rounded-xl border border-indigo-400/25 bg-indigo-500/[0.05] p-5">
             <h2 id="answer-h" className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">
               AI answer
-              {answer?.provider && <span className="font-normal normal-case text-muted-foreground">· {answer.provider}</span>}
             </h2>
             {loadingAnswer && <AnswerSkeleton />}
             {answerErr && !loadingAnswer && (
@@ -200,7 +269,7 @@ export default function ResultsPage() {
             )}
             {answer && !abstained && (
               <>
-                <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/90">
+                <div className="space-y-3 break-words text-[15px] leading-relaxed text-foreground/90">
                   {renderAnswer(answer.answer, answer.sources)}
                 </div>
                 {citedSources.length > 0 && (
@@ -210,9 +279,9 @@ export default function ResultsPage() {
                       {citedSources.map((s) => (
                         <li key={s.n} className="text-sm">
                           <Link to={`/case/${s.case_id}`} className="font-medium text-indigo-300 hover:underline">
-                            [{s.n}] Case {s.case_id}
+                            [{s.n}] {sourceLabel(s.title ?? titles[s.case_id], s.case_id)}
                           </Link>
-                          <span className="text-muted-foreground"> — {clip(s.text, SOURCE_EXCERPT_CHARS)}</span>
+                          <p className="mt-0.5 text-muted-foreground">{clip(s.text, SOURCE_EXCERPT_CHARS)}</p>
                         </li>
                       ))}
                     </ul>
